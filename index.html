@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eldrex Writings | Personal Blog</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-analytics.js"></script>
+    <script src="js/firebase-config.js" defer></script>
+    <script src="js/blog.js" defer></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 z-50 bg-emberflare-50/90 backdrop-blur-md border-b border-emberflare-200 transition-colors duration-300">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-4">
+                    <button id="backButton" class="flex items-center gap-2 text-emberflare-600 hover:text-primary transition-colors duration-200 group">
+                        <span class="material-symbols-outlined text-[20px] group-hover:-translate-x-1 transition-transform">arrow_back</span>
+                        <span class="text-sm font-bold">Back</span>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-emberflare-800 text-sm md:text-base font-bold tracking-tight">Eldrex Writings</h1>
+                </div>
+                <div class="w-[60px]">
+                    <button id="settingsBtn" class="icon-button" aria-label="Settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Settings Panel -->
+    <div id="settingsPanel" class="settings-panel">
+        <div class="settings-content">
+            <div class="settings-header">
+                <h3>Settings</h3>
+                <button id="closeSettings" class="icon-button">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="settings-group">
+                <h4>Username</h4>
+                <input type="text" id="usernameInput" placeholder="Enter username (optional)" class="input-field">
+                <button id="updateUsername" class="btn-primary">Update Username</button>
+                <button id="removeUsername" class="btn-secondary">Remove Username</button>
+            </div>
+            
+            <div class="settings-group">
+                <h4>Legal</h4>
+                <a href="#" class="settings-link">Privacy Policy</a>
+                <a href="#" class="settings-link">Terms of Use</a>
+                <a href="#" class="settings-link">License</a>
+            </div>
+            
+            <div class="settings-group">
+                <button id="clearCache" class="btn-secondary">Clear Cache & Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comment Username Modal -->
+    <div id="usernameModal" class="modal">
+        <div class="modal-content">
+            <h3>Choose a Username</h3>
+            <p>You can comment anonymously or choose a username:</p>
+            <input type="text" id="commentUsername" placeholder="Anonymous (leave blank)" class="input-field">
+            <div class="modal-actions">
+                <button id="cancelUsername" class="btn-secondary">Cancel</button>
+                <button id="saveUsername" class="btn-primary">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <!-- Page Header -->
+            <div class="page-header">
+                <h1 class="page-title">Thoughts & Reflections</h1>
+                <p class="page-subtitle">Personal writings on growth, learning, and life experiences</p>
+                
+                <!-- Search Bar -->
+                <div class="search-container">
+                    <input type="text" id="searchInput" placeholder="Search posts..." class="search-input">
+                    <i class="fas fa-search search-icon"></i>
+                </div>
+                
+                <!-- Year Filter -->
+                <div class="year-filter">
+                    <select id="yearFilter" class="select-filter">
+                        <option value="">All Years</option>
+                        <!-- Dynamically populated -->
+                    </select>
+                </div>
+            </div>
+
+            <!-- Categories Bar -->
+            <div class="categories-container">
+                <div class="categories-scroll">
+                    <button class="category-btn active" data-category="all">All Posts</button>
+                    <!-- Dynamically populated -->
+                </div>
+                <div class="scroll-arrows">
+                    <button class="scroll-arrow left" aria-label="Scroll left">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button class="scroll-arrow right" aria-label="Scroll right">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Posts Grid -->
+            <div class="posts-grid" id="postsGrid">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading posts...</p>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </main>
+
+    <!-- Fullscreen Post -->
+    <div id="fullscreenPost" class="fullscreen-post">
+        <div class="fullscreen-header">
+            <button id="closeFullscreen" class="back-btn">
+                <i class="fas fa-arrow-left"></i>
+                Back to Posts
+            </button>
+            <div class="post-actions">
+                <button id="likeBtn" class="icon-button" aria-label="Like post">
+                    <i class="far fa-heart"></i>
+                    <span id="likeCount">0</span>
+                </button>
+                <button id="shareBtn" class="icon-button" aria-label="Share post">
+                    <i class="fas fa-share-alt"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="fullscreen-content">
+            <!-- Content loaded dynamically -->
+        </div>
+        
+        <!-- Comments Section -->
+        <div class="comments-section">
+            <div class="comments-header">
+                <h3>Comments</h3>
+                <button id="addCommentBtn" class="btn-primary">
+                    <i class="fas fa-plus"></i> Add Comment
+                </button>
+            </div>
+            
+            <div class="comment-form" id="commentForm">
+                <textarea id="commentInput" placeholder="Add a comment..." rows="3"></textarea>
+                <div class="comment-form-actions">
+                    <button id="cancelComment" class="btn-secondary">Cancel</button>
+                    <button id="submitComment" class="btn-primary">Post Comment</button>
+                </div>
+            </div>
+            
+            <div class="comments-list" id="commentsList">
+                <!-- Comments loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-logo">
+                <div class="logo-icon">E</div>
+                <span>Eldrex Writings</span>
+            </div>
+            <p class="footer-copyright">
+                © 2025 Eldrex Writings. All rights reserved.
+            </p>
+            <div class="footer-links">
+                <a href="#" class="footer-link">Home</a>
+                <a href="#" class="footer-link">About</a>
+                <a href="#" class="footer-link">Contact</a>
+                <a href="#" class="footer-link">Privacy</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
