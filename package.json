@@ -1,0 +1,10 @@
+{
+  "name": "eldrex-blog",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "echo 'No build step required for static files'",
+    "dev": "echo 'Run a local server like: python3 -m http.server 3000'"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
