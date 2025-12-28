@@ -1,4 +1,9 @@
-import { db, auth, rtdb, analytics } from './firebase-config.js';
+import {
+    db,
+    auth,
+    rtdb,
+    analytics
+} from './firebase-config.js';
 
 class BlogManager {
     constructor() {
@@ -13,7 +18,7 @@ class BlogManager {
             year: 'all',
             search: ''
         };
-        
+
         this.init();
     }
 
@@ -21,19 +26,19 @@ class BlogManager {
         try {
             // Initialize Firebase Analytics
             analytics.logEvent('blog_loaded');
-            
+
             // Sign in anonymously for engagement features
             await this.initAnonymousAuth();
-            
+
             // Load posts
             await this.loadPosts();
-            
+
             // Setup event listeners
             this.setupEventListeners();
-            
+
             // Setup intersection observer for lazy loading
             this.setupLazyLoading();
-            
+
         } catch (error) {
             console.error('Initialization error:', error);
             this.showError('Failed to load blog content. Please refresh the page.');
@@ -45,7 +50,7 @@ class BlogManager {
             // Check for existing anonymous user
             await auth.signInAnonymously();
             this.currentUser = auth.currentUser;
-            
+
             // Listen for auth state changes
             auth.onAuthStateChanged((user) => {
                 this.currentUser = user;
@@ -53,7 +58,7 @@ class BlogManager {
                     this.loadUserPreferences(user.uid);
                 }
             });
-            
+
         } catch (error) {
             console.error('Auth error:', error);
         }
@@ -64,14 +69,14 @@ class BlogManager {
             const postsRef = db.collection('posts')
                 .where('published', '==', true)
                 .orderBy('createdAt', 'desc');
-            
+
             const snapshot = await postsRef.get();
-            
+
             if (snapshot.empty) {
                 this.showNoPosts();
                 return;
             }
-            
+
             this.posts = [];
             snapshot.forEach(doc => {
                 const post = {
@@ -81,23 +86,23 @@ class BlogManager {
                     updatedAt: doc.data().updatedAt?.toDate() || new Date()
                 };
                 this.posts.push(post);
-                
+
                 // Extract categories
                 if (post.categories && Array.isArray(post.categories)) {
                     post.categories.forEach(cat => this.categories.add(cat));
                 }
-                
+
                 // Extract years
                 const year = post.createdAt.getFullYear().toString();
                 this.years.add(year);
             });
-            
+
             this.filteredPosts = [...this.posts];
             this.renderCategories();
             this.renderYears();
             this.renderPosts();
             this.attachPostListeners();
-            
+
         } catch (error) {
             console.error('Error loading posts:', error);
             this.showError('Failed to load posts. Please try again.');
@@ -107,24 +112,24 @@ class BlogManager {
     renderCategories() {
         const categoryList = document.getElementById('category-list');
         if (!categoryList) return;
-        
+
         let html = '<button class="category-btn active" data-category="all">All Posts</button>';
-        
+
         this.categories.forEach(category => {
             if (category !== 'All Posts') {
                 html += `<button class="category-btn" data-category="${category}">${category}</button>`;
             }
         });
-        
+
         categoryList.innerHTML = html;
     }
 
     renderYears() {
         const yearFilter = document.getElementById('year-filter');
         if (!yearFilter) return;
-        
+
         let html = '<option value="all">All Years</option>';
-        
+
         Array.from(this.years)
             .sort((a, b) => b - a)
             .forEach(year => {
@@ -132,14 +137,14 @@ class BlogManager {
                     html += `<option value="${year}">${year}</option>`;
                 }
             });
-        
+
         yearFilter.innerHTML = html;
     }
 
     renderPosts() {
         const postsGrid = document.getElementById('posts-grid');
         if (!postsGrid) return;
-        
+
         if (this.filteredPosts.length === 0) {
             postsGrid.innerHTML = `
                 <div class="no-posts">
@@ -149,7 +154,7 @@ class BlogManager {
             `;
             return;
         }
-        
+
         let html = '';
         this.filteredPosts.forEach((post, index) => {
             const category = post.categories?.[0] || 'Uncategorized';
@@ -158,7 +163,7 @@ class BlogManager {
                 month: 'long',
                 day: 'numeric'
             });
-            
+
             html += `
                 <article class="post-card" data-id="${post.id}" style="animation-delay: ${index * 0.1}s">
                     ${post.imageUrl ? `
@@ -187,9 +192,9 @@ class BlogManager {
                 </article>
             `;
         });
-        
+
         postsGrid.innerHTML = html;
-        
+
         // Initialize lazy loading for newly added images
         this.initLazyLoading();
     }
@@ -198,23 +203,23 @@ class BlogManager {
         try {
             const postRef = db.collection('posts').doc(postId);
             const doc = await postRef.get();
-            
+
             if (!doc.exists) {
                 throw new Error('Post not found');
             }
-            
+
             const post = {
                 id: doc.id,
                 ...doc.data(),
                 createdAt: doc.data().createdAt?.toDate() || new Date()
             };
-            
+
             this.currentPost = post;
             this.renderPostDetail(post);
             this.openPostFullscreen();
             this.loadComments(postId);
             this.loadLikes(postId);
-            
+
         } catch (error) {
             console.error('Error loading post:', error);
             this.showError('Failed to load post. Please try again.');
@@ -224,21 +229,21 @@ class BlogManager {
     renderPostDetail(post) {
         const content = document.getElementById('post-fullscreen-content');
         if (!content) return;
-        
+
         const date = post.createdAt.toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'long',
             day: 'numeric'
         });
         const category = post.categories?.[0] || 'Uncategorized';
-        
+
         let bodyHtml = post.content || '';
-        
+
         // Convert Markdown to HTML if needed
         if (post.contentType === 'markdown') {
             bodyHtml = this.markdownToHtml(post.content);
         }
-        
+
         const html = `
             ${post.imageUrl ? `
                 <div class="post-fullscreen-media-container">
@@ -283,9 +288,9 @@ class BlogManager {
                 <span class="like-count" id="like-count">0</span> likes
             </div>
         `;
-        
+
         content.innerHTML = html;
-        
+
         // Add comment submit listener
         const submitBtn = document.getElementById('comment-submit');
         if (submitBtn) {
@@ -297,16 +302,16 @@ class BlogManager {
         try {
             const commentsRef = db.collection('posts').doc(postId).collection('comments')
                 .orderBy('createdAt', 'desc');
-            
+
             const snapshot = await commentsRef.get();
             const commentsList = document.getElementById('comments-list');
-            
+
             if (!snapshot.empty) {
                 let html = '';
                 snapshot.forEach(doc => {
                     const comment = doc.data();
                     const date = comment.createdAt?.toDate() || new Date();
-                    
+
                     html += `
                         <div class="comment-item" data-id="${doc.id}">
                             <div class="comment-header">
@@ -338,9 +343,9 @@ class BlogManager {
                         </div>
                     `;
                 });
-                
+
                 commentsList.innerHTML = html;
-                
+
                 // Add delete listeners
                 document.querySelectorAll('.delete-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
@@ -349,7 +354,7 @@ class BlogManager {
                     });
                 });
             }
-            
+
         } catch (error) {
             console.error('Error loading comments:', error);
         }
@@ -358,33 +363,33 @@ class BlogManager {
     async submitComment(postId) {
         const input = document.getElementById('comment-input');
         const content = input?.value.trim();
-        
+
         if (!content) {
             this.showToast('Please enter a comment', 'error');
             return;
         }
-        
+
         if (!this.currentUser) {
             this.showToast('Please sign in to comment', 'error');
             return;
         }
-        
+
         try {
             // Get username from local storage
             const username = localStorage.getItem('blog_username') || 'Anonymous';
-            
+
             // Check for restricted usernames
             if (this.isRestrictedUsername(username)) {
                 this.showToast('This username is not allowed', 'error');
                 return;
             }
-            
+
             // Content moderation
             if (this.containsSensitiveContent(content)) {
                 this.showToast('Comment contains sensitive content', 'error');
                 return;
             }
-            
+
             const comment = {
                 content: content,
                 authorName: username,
@@ -394,18 +399,20 @@ class BlogManager {
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
-            
+
             const commentRef = await db.collection('posts').doc(postId).collection('comments').add(comment);
-            
+
             // Clear input
             input.value = '';
-            
+
             // Reload comments
             this.loadComments(postId);
-            
+
             this.showToast('Comment posted successfully', 'success');
-            analytics.logEvent('comment_posted', { post_id: postId });
-            
+            analytics.logEvent('comment_posted', {
+                post_id: postId
+            });
+
         } catch (error) {
             console.error('Error posting comment:', error);
             this.showToast('Failed to post comment', 'error');
@@ -416,12 +423,12 @@ class BlogManager {
         if (!confirm('Are you sure you want to delete this comment?')) {
             return;
         }
-        
+
         try {
             await db.collection('posts').doc(postId).collection('comments').doc(commentId).delete();
             this.loadComments(postId);
             this.showToast('Comment deleted', 'success');
-            
+
         } catch (error) {
             console.error('Error deleting comment:', error);
             this.showToast('Failed to delete comment', 'error');
@@ -431,18 +438,18 @@ class BlogManager {
     async loadLikes(postId) {
         try {
             const likesRef = rtdb.ref(`likes/${postId}`);
-            
+
             // Get current like count
             const snapshot = await likesRef.once('value');
             const likes = snapshot.val() || {};
             const likeCount = Object.keys(likes).length;
-            
+
             // Update display
             const likeCountElement = document.getElementById('like-count');
             if (likeCountElement) {
                 likeCountElement.textContent = likeCount;
             }
-            
+
             // Check if current user liked the post
             if (this.currentUser) {
                 const userLikeRef = rtdb.ref(`likes/${postId}/${this.currentUser.uid}`);
@@ -453,10 +460,10 @@ class BlogManager {
                     }
                 });
             }
-            
+
             // Setup like button listener
             this.setupLikeButton(postId);
-            
+
         } catch (error) {
             console.error('Error loading likes:', error);
         }
@@ -467,24 +474,28 @@ class BlogManager {
             this.showToast('Please sign in to like posts', 'error');
             return;
         }
-        
+
         try {
             const userLikeRef = rtdb.ref(`likes/${postId}/${this.currentUser.uid}`);
             const snapshot = await userLikeRef.once('value');
-            
+
             if (snapshot.exists()) {
                 // Unlike
                 await userLikeRef.remove();
-                analytics.logEvent('post_unliked', { post_id: postId });
+                analytics.logEvent('post_unliked', {
+                    post_id: postId
+                });
             } else {
                 // Like
                 await userLikeRef.set({
                     timestamp: Date.now(),
                     userId: this.currentUser.uid
                 });
-                analytics.logEvent('post_liked', { post_id: postId });
+                analytics.logEvent('post_liked', {
+                    post_id: postId
+                });
             }
-            
+
         } catch (error) {
             console.error('Error toggling like:', error);
             this.showToast('Failed to update like', 'error');
@@ -493,31 +504,31 @@ class BlogManager {
 
     filterPosts() {
         let filtered = [...this.posts];
-        
+
         // Apply category filter
         if (this.currentFilters.category !== 'all') {
-            filtered = filtered.filter(post => 
+            filtered = filtered.filter(post =>
                 post.categories?.includes(this.currentFilters.category)
             );
         }
-        
+
         // Apply year filter
         if (this.currentFilters.year !== 'all') {
-            filtered = filtered.filter(post => 
+            filtered = filtered.filter(post =>
                 post.createdAt.getFullYear().toString() === this.currentFilters.year
             );
         }
-        
+
         // Apply search filter
         if (this.currentFilters.search) {
             const searchTerm = this.currentFilters.search.toLowerCase();
-            filtered = filtered.filter(post => 
+            filtered = filtered.filter(post =>
                 post.title.toLowerCase().includes(searchTerm) ||
                 post.content.toLowerCase().includes(searchTerm) ||
                 post.categories?.some(cat => cat.toLowerCase().includes(searchTerm))
             );
         }
-        
+
         this.filteredPosts = filtered;
         this.renderPosts();
         this.attachPostListeners();
@@ -531,35 +542,43 @@ class BlogManager {
                     btn.classList.remove('active');
                 });
                 e.target.classList.add('active');
-                
+
                 this.currentFilters.category = e.target.dataset.category;
                 this.filterPosts();
-                analytics.logEvent('category_filter', { category: e.target.dataset.category });
+                analytics.logEvent('category_filter', {
+                    category: e.target.dataset.category
+                });
             }
         });
-        
+
         // Year filter
         document.getElementById('year-filter')?.addEventListener('change', (e) => {
             this.currentFilters.year = e.target.value;
             this.filterPosts();
-            analytics.logEvent('year_filter', { year: e.target.value });
+            analytics.logEvent('year_filter', {
+                year: e.target.value
+            });
         });
-        
+
         // Search
         document.getElementById('search-btn')?.addEventListener('click', () => {
             this.currentFilters.search = document.getElementById('search-input').value;
             this.filterPosts();
-            analytics.logEvent('search', { term: this.currentFilters.search });
+            analytics.logEvent('search', {
+                term: this.currentFilters.search
+            });
         });
-        
+
         document.getElementById('search-input')?.addEventListener('keyup', (e) => {
             if (e.key === 'Enter') {
                 this.currentFilters.search = e.target.value;
                 this.filterPosts();
-                analytics.logEvent('search', { term: e.target.value });
+                analytics.logEvent('search', {
+                    term: e.target.value
+                });
             }
         });
-        
+
         // Clear filters
         document.getElementById('clear-filters')?.addEventListener('click', () => {
             this.currentFilters = {
@@ -567,49 +586,49 @@ class BlogManager {
                 year: 'all',
                 search: ''
             };
-            
+
             document.querySelectorAll('.category-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.category === 'all');
             });
-            
+
             document.getElementById('search-input').value = '';
             document.getElementById('year-filter').value = 'all';
-            
+
             this.filterPosts();
             analytics.logEvent('clear_filters');
         });
-        
+
         // Settings panel
         document.getElementById('settings-toggle')?.addEventListener('click', () => {
             this.openSettingsPanel();
         });
-        
+
         document.getElementById('close-settings')?.addEventListener('click', () => {
             this.closeSettingsPanel();
         });
-        
+
         // Fullscreen post
         document.getElementById('post-fullscreen-back')?.addEventListener('click', () => {
             this.closePostFullscreen();
         });
-        
+
         document.getElementById('post-fullscreen-share')?.addEventListener('click', () => {
             this.sharePost();
         });
-        
+
         // Username settings
         document.getElementById('save-username')?.addEventListener('click', () => {
             this.saveUsername();
         });
-        
+
         document.getElementById('remove-username')?.addEventListener('click', () => {
             this.removeUsername();
         });
-        
+
         document.getElementById('clear-data')?.addEventListener('click', () => {
             this.clearLocalData();
         });
-        
+
         // Legal pages (placeholder)
         ['privacy-policy', 'terms-of-use', 'license'].forEach(id => {
             document.getElementById(id)?.addEventListener('click', () => {
@@ -625,7 +644,7 @@ class BlogManager {
                 this.loadPostDetail(postId);
             });
         });
-        
+
         document.querySelectorAll('.post-card').forEach(card => {
             card.addEventListener('click', (e) => {
                 if (!e.target.closest('.post-read-btn')) {
@@ -641,11 +660,11 @@ class BlogManager {
         likeBtn.id = 'like-btn';
         likeBtn.className = 'like-btn';
         likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
-        
+
         likeBtn.addEventListener('click', () => {
             this.toggleLike(postId);
         });
-        
+
         const likesDisplay = document.getElementById('likes-display');
         if (likesDisplay) {
             likesDisplay.appendChild(likeBtn);
@@ -655,12 +674,16 @@ class BlogManager {
     openPostFullscreen() {
         document.getElementById('post-fullscreen').classList.add('active');
         document.body.classList.add('no-scroll');
-        
+
         // Update URL
         if (this.currentPost?.slug) {
-            history.pushState({ postId: this.currentPost.id }, '', `/${this.currentPost.slug}`);
+            history.pushState({
+                postId: this.currentPost.id
+            }, '', `/${this.currentPost.slug}`);
         } else if (this.currentPost) {
-            history.pushState({ postId: this.currentPost.id }, '', `?post=${this.currentPost.id}`);
+            history.pushState({
+                postId: this.currentPost.id
+            }, '', `?post=${this.currentPost.id}`);
         }
     }
 
@@ -683,17 +706,17 @@ class BlogManager {
     saveUsername() {
         const input = document.getElementById('username-input');
         const username = input?.value.trim();
-        
+
         if (!username) {
             this.showToast('Please enter a username', 'error');
             return;
         }
-        
+
         if (this.isRestrictedUsername(username)) {
             this.showToast('This username is not allowed', 'error');
             return;
         }
-        
+
         localStorage.setItem('blog_username', username);
         this.showToast('Username saved', 'success');
         analytics.logEvent('username_set');
@@ -722,17 +745,19 @@ class BlogManager {
 
     async sharePost() {
         if (!this.currentPost) return;
-        
+
         const shareData = {
             title: this.currentPost.title,
             text: this.currentPost.excerpt || this.truncateText(this.currentPost.content, 100),
             url: window.location.href
         };
-        
+
         if (navigator.share) {
             try {
                 await navigator.share(shareData);
-                analytics.logEvent('post_shared', { post_id: this.currentPost.id });
+                analytics.logEvent('post_shared', {
+                    post_id: this.currentPost.id
+                });
             } catch (error) {
                 console.error('Error sharing:', error);
             }
@@ -778,10 +803,10 @@ class BlogManager {
             'administrator',
             'moderator'
         ];
-        
+
         const lowerUsername = username.toLowerCase();
-        return restricted.some(restrictedName => 
-            lowerUsername.includes(restrictedName) || 
+        return restricted.some(restrictedName =>
+            lowerUsername.includes(restrictedName) ||
             restrictedName.includes(lowerUsername)
         );
     }
@@ -793,7 +818,7 @@ class BlogManager {
             /racial.*slur/i,
             /explicit.*content/i
         ];
-        
+
         return sensitivePatterns.some(pattern => pattern.test(text));
     }
 
@@ -850,7 +875,7 @@ class BlogManager {
         // Remove existing toast
         const existingToast = document.querySelector('.toast');
         if (existingToast) existingToast.remove();
-        
+
         // Create new toast
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
@@ -866,9 +891,9 @@ class BlogManager {
             z-index: 9999;
             animation: slideIn 0.3s ease-out;
         `;
-        
+
         document.body.appendChild(toast);
-        
+
         // Auto remove after 3 seconds
         setTimeout(() => {
             toast.style.animation = 'slideOut 0.3s ease-out forwards';
@@ -880,7 +905,7 @@ class BlogManager {
 // Initialize blog when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     const blog = new BlogManager();
-    
+
     // Handle browser navigation
     window.addEventListener('popstate', (event) => {
         if (event.state?.postId) {
@@ -889,7 +914,9 @@ document.addEventListener('DOMContentLoaded', () => {
             blog.closePostFullscreen();
         }
     });
-    
+
     // Make blog instance globally available for debugging
     window.blog = blog;
 });
+
+export default BlogManager;
