@@ -1,12 +1,16 @@
-import {
-    db,
-    auth,
-    rtdb,
-    analytics
-} from './firebase-config.js';
+import { initializeFirebase, getFirebase } from './firebase-config.js';
 
 class BlogManager {
     constructor() {
+        // Initialize Firebase first
+        initializeFirebase();
+        const { db, auth, rtdb, analytics } = getFirebase();
+        
+        this.db = db;
+        this.auth = auth;
+        this.rtdb = rtdb;
+        this.analytics = analytics;
+        
         this.currentUser = null;
         this.posts = [];
         this.filteredPosts = [];
@@ -25,7 +29,9 @@ class BlogManager {
     async init() {
         try {
             // Initialize Firebase Analytics
-            analytics.logEvent('blog_loaded');
+            if (this.analytics) {
+                this.analytics.logEvent('blog_loaded');
+            }
 
             // Sign in anonymously for engagement features
             await this.initAnonymousAuth();
@@ -48,11 +54,11 @@ class BlogManager {
     async initAnonymousAuth() {
         try {
             // Check for existing anonymous user
-            await auth.signInAnonymously();
-            this.currentUser = auth.currentUser;
+            await this.auth.signInAnonymously();
+            this.currentUser = this.auth.currentUser;
 
             // Listen for auth state changes
-            auth.onAuthStateChanged((user) => {
+            this.auth.onAuthStateChanged((user) => {
                 this.currentUser = user;
                 if (user) {
                     this.loadUserPreferences(user.uid);
@@ -66,7 +72,7 @@ class BlogManager {
 
     async loadPosts() {
         try {
-            const postsRef = db.collection('posts')
+            const postsRef = this.db.collection('posts')
                 .where('published', '==', true)
                 .orderBy('createdAt', 'desc');
 
@@ -201,7 +207,7 @@ class BlogManager {
 
     async loadPostDetail(postId) {
         try {
-            const postRef = db.collection('posts').doc(postId);
+            const postRef = this.db.collection('posts').doc(postId);
             const doc = await postRef.get();
 
             if (!doc.exists) {
@@ -300,7 +306,7 @@ class BlogManager {
 
     async loadComments(postId) {
         try {
-            const commentsRef = db.collection('posts').doc(postId).collection('comments')
+            const commentsRef = this.db.collection('posts').doc(postId).collection('comments')
                 .orderBy('createdAt', 'desc');
 
             const snapshot = await commentsRef.get();
@@ -400,7 +406,7 @@ class BlogManager {
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
-            const commentRef = await db.collection('posts').doc(postId).collection('comments').add(comment);
+            await this.db.collection('posts').doc(postId).collection('comments').add(comment);
 
             // Clear input
             input.value = '';
@@ -409,9 +415,11 @@ class BlogManager {
             this.loadComments(postId);
 
             this.showToast('Comment posted successfully', 'success');
-            analytics.logEvent('comment_posted', {
-                post_id: postId
-            });
+            if (this.analytics) {
+                this.analytics.logEvent('comment_posted', {
+                    post_id: postId
+                });
+            }
 
         } catch (error) {
             console.error('Error posting comment:', error);
@@ -425,7 +433,7 @@ class BlogManager {
         }
 
         try {
-            await db.collection('posts').doc(postId).collection('comments').doc(commentId).delete();
+            await this.db.collection('posts').doc(postId).collection('comments').doc(commentId).delete();
             this.loadComments(postId);
             this.showToast('Comment deleted', 'success');
 
@@ -437,7 +445,7 @@ class BlogManager {
 
     async loadLikes(postId) {
         try {
-            const likesRef = rtdb.ref(`likes/${postId}`);
+            const likesRef = this.rtdb.ref(`likes/${postId}`);
 
             // Get current like count
             const snapshot = await likesRef.once('value');
@@ -452,7 +460,7 @@ class BlogManager {
 
             // Check if current user liked the post
             if (this.currentUser) {
-                const userLikeRef = rtdb.ref(`likes/${postId}/${this.currentUser.uid}`);
+                const userLikeRef = this.rtdb.ref(`likes/${postId}/${this.currentUser.uid}`);
                 userLikeRef.on('value', (snap) => {
                     const likeBtn = document.getElementById('like-btn');
                     if (likeBtn) {
@@ -476,24 +484,28 @@ class BlogManager {
         }
 
         try {
-            const userLikeRef = rtdb.ref(`likes/${postId}/${this.currentUser.uid}`);
+            const userLikeRef = this.rtdb.ref(`likes/${postId}/${this.currentUser.uid}`);
             const snapshot = await userLikeRef.once('value');
 
             if (snapshot.exists()) {
                 // Unlike
                 await userLikeRef.remove();
-                analytics.logEvent('post_unliked', {
-                    post_id: postId
-                });
+                if (this.analytics) {
+                    this.analytics.logEvent('post_unliked', {
+                        post_id: postId
+                    });
+                }
             } else {
                 // Like
                 await userLikeRef.set({
                     timestamp: Date.now(),
                     userId: this.currentUser.uid
                 });
-                analytics.logEvent('post_liked', {
-                    post_id: postId
-                });
+                if (this.analytics) {
+                    this.analytics.logEvent('post_liked', {
+                        post_id: postId
+                    });
+                }
             }
 
         } catch (error) {
@@ -545,9 +557,11 @@ class BlogManager {
 
                 this.currentFilters.category = e.target.dataset.category;
                 this.filterPosts();
-                analytics.logEvent('category_filter', {
-                    category: e.target.dataset.category
-                });
+                if (this.analytics) {
+                    this.analytics.logEvent('category_filter', {
+                        category: e.target.dataset.category
+                    });
+                }
             }
         });
 
@@ -555,27 +569,33 @@ class BlogManager {
         document.getElementById('year-filter')?.addEventListener('change', (e) => {
             this.currentFilters.year = e.target.value;
             this.filterPosts();
-            analytics.logEvent('year_filter', {
-                year: e.target.value
-            });
+            if (this.analytics) {
+                this.analytics.logEvent('year_filter', {
+                    year: e.target.value
+                });
+            }
         });
 
         // Search
         document.getElementById('search-btn')?.addEventListener('click', () => {
             this.currentFilters.search = document.getElementById('search-input').value;
             this.filterPosts();
-            analytics.logEvent('search', {
-                term: this.currentFilters.search
-            });
+            if (this.analytics) {
+                this.analytics.logEvent('search', {
+                    term: this.currentFilters.search
+                });
+            }
         });
 
         document.getElementById('search-input')?.addEventListener('keyup', (e) => {
             if (e.key === 'Enter') {
                 this.currentFilters.search = e.target.value;
                 this.filterPosts();
-                analytics.logEvent('search', {
-                    term: e.target.value
-                });
+                if (this.analytics) {
+                    this.analytics.logEvent('search', {
+                        term: e.target.value
+                    });
+                }
             }
         });
 
@@ -595,7 +615,9 @@ class BlogManager {
             document.getElementById('year-filter').value = 'all';
 
             this.filterPosts();
-            analytics.logEvent('clear_filters');
+            if (this.analytics) {
+                this.analytics.logEvent('clear_filters');
+            }
         });
 
         // Settings panel
@@ -719,14 +741,18 @@ class BlogManager {
 
         localStorage.setItem('blog_username', username);
         this.showToast('Username saved', 'success');
-        analytics.logEvent('username_set');
+        if (this.analytics) {
+            this.analytics.logEvent('username_set');
+        }
     }
 
     removeUsername() {
         localStorage.removeItem('blog_username');
         document.getElementById('username-input').value = '';
         this.showToast('Username removed', 'success');
-        analytics.logEvent('username_removed');
+        if (this.analytics) {
+            this.analytics.logEvent('username_removed');
+        }
     }
 
     loadUserPreferences(userId) {
@@ -755,9 +781,11 @@ class BlogManager {
         if (navigator.share) {
             try {
                 await navigator.share(shareData);
-                analytics.logEvent('post_shared', {
-                    post_id: this.currentPost.id
-                });
+                if (this.analytics) {
+                    this.analytics.logEvent('post_shared', {
+                        post_id: this.currentPost.id
+                    });
+                }
             } catch (error) {
                 console.error('Error sharing:', error);
             }
@@ -901,22 +929,5 @@ class BlogManager {
         }, 3000);
     }
 }
-
-// Initialize blog when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    const blog = new BlogManager();
-
-    // Handle browser navigation
-    window.addEventListener('popstate', (event) => {
-        if (event.state?.postId) {
-            blog.loadPostDetail(event.state.postId);
-        } else {
-            blog.closePostFullscreen();
-        }
-    });
-
-    // Make blog instance globally available for debugging
-    window.blog = blog;
-});
 
 export default BlogManager;
