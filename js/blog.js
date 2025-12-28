@@ -1,813 +1,895 @@
-class BlogPlatform {
+import { db, auth, rtdb, analytics } from './firebase-config.js';
+
+class BlogManager {
     constructor() {
-        this.currentUser = this.getCurrentUser();
+        this.currentUser = null;
         this.posts = [];
         this.filteredPosts = [];
-        this.categories = [];
-        this.years = [];
-        this.currentFilter = {
-            category: null,
-            year: null,
-            search: '',
-            page: 1,
-            limit: 9
+        this.categories = new Set(['All Posts']);
+        this.years = new Set(['All Years']);
+        this.currentPost = null;
+        this.currentFilters = {
+            category: 'all',
+            year: 'all',
+            search: ''
         };
-        this.hasMorePosts = true;
-        this.lastVisible = null;
         
         this.init();
     }
 
-    init() {
-        this.setupEventListeners();
-        this.loadCategories();
-        this.loadYears();
-        this.loadPosts();
-        this.setupRealtimeUpdates();
-    }
-
-    getCurrentUser() {
-        let user = localStorage.getItem('blog_user');
-        if (user) {
-            try {
-                user = JSON.parse(user);
-            } catch {
-                user = { id: this.generateUserId(), username: null };
-            }
-        } else {
-            user = { id: this.generateUserId(), username: null };
-            localStorage.setItem('blog_user', JSON.stringify(user));
-        }
-        return user;
-    }
-
-    generateUserId() {
-        return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    }
-
-    setupEventListeners() {
-        // Back button
-        document.getElementById('backButton').addEventListener('click', () => {
-            if (document.getElementById('fullscreenPost').classList.contains('hidden')) {
-                window.history.back();
-            } else {
-                this.closeFullscreenPost();
-            }
-        });
-
-        // Settings
-        document.getElementById('settingsButton').addEventListener('click', () => this.openSettings());
-        document.getElementById('closeSettings').addEventListener('click', () => this.closeSettings());
-        document.getElementById('settingsOverlay').addEventListener('click', () => this.closeSettings());
-        document.getElementById('saveUsername').addEventListener('click', () => this.saveUsername());
-        document.getElementById('removeUsername').addEventListener('click', () => this.removeUsername());
-
-        // Search
-        const searchInput = document.getElementById('searchInput');
-        searchInput.addEventListener('input', debounce(() => {
-            this.currentFilter.search = searchInput.value.trim();
-            this.currentFilter.page = 1;
-            document.getElementById('clearSearch').classList.toggle('hidden', !this.currentFilter.search);
-            this.loadPosts();
-        }, 300));
-
-        document.getElementById('clearSearch').addEventListener('click', () => {
-            searchInput.value = '';
-            this.currentFilter.search = '';
-            document.getElementById('clearSearch').classList.add('hidden');
-            this.loadPosts();
-        });
-
-        // Year filter
-        document.getElementById('yearFilter').addEventListener('change', (e) => {
-            this.currentFilter.year = e.target.value || null;
-            this.currentFilter.page = 1;
-            this.loadPosts();
-        });
-
-        // Load more
-        document.getElementById('loadMoreBtn')?.addEventListener('click', () => {
-            this.currentFilter.page++;
-            this.loadPosts(true);
-        });
-
-        // Fullscreen post
-        document.getElementById('closeFullscreen').addEventListener('click', () => this.closeFullscreenPost());
-
-        // Comments
-        document.getElementById('submitComment').addEventListener('click', () => this.submitComment());
-
-        // Username modal
-        document.getElementById('useAnonymous').addEventListener('click', () => this.useAnonymous());
-        document.getElementById('saveModalUsername').addEventListener('click', () => this.saveModalUsername());
-
-        // Share
-        document.getElementById('sharePost').addEventListener('click', () => this.shareCurrentPost());
-    }
-
-    async loadCategories() {
+    async init() {
         try {
-            const snapshot = await firebaseServices.db.collection('categories')
-                .where('active', '==', true)
-                .orderBy('name')
-                .get();
+            // Initialize Firebase Analytics
+            analytics.logEvent('blog_loaded');
             
-            this.categories = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-
-            this.renderCategories();
+            // Sign in anonymously for engagement features
+            await this.initAnonymousAuth();
+            
+            // Load posts
+            await this.loadPosts();
+            
+            // Setup event listeners
+            this.setupEventListeners();
+            
+            // Setup intersection observer for lazy loading
+            this.setupLazyLoading();
+            
         } catch (error) {
-            console.error('Error loading categories:', error);
+            console.error('Initialization error:', error);
+            this.showError('Failed to load blog content. Please refresh the page.');
+        }
+    }
+
+    async initAnonymousAuth() {
+        try {
+            // Check for existing anonymous user
+            await auth.signInAnonymously();
+            this.currentUser = auth.currentUser;
+            
+            // Listen for auth state changes
+            auth.onAuthStateChanged((user) => {
+                this.currentUser = user;
+                if (user) {
+                    this.loadUserPreferences(user.uid);
+                }
+            });
+            
+        } catch (error) {
+            console.error('Auth error:', error);
+        }
+    }
+
+    async loadPosts() {
+        try {
+            const postsRef = db.collection('posts')
+                .where('published', '==', true)
+                .orderBy('createdAt', 'desc');
+            
+            const snapshot = await postsRef.get();
+            
+            if (snapshot.empty) {
+                this.showNoPosts();
+                return;
+            }
+            
+            this.posts = [];
+            snapshot.forEach(doc => {
+                const post = {
+                    id: doc.id,
+                    ...doc.data(),
+                    createdAt: doc.data().createdAt?.toDate() || new Date(),
+                    updatedAt: doc.data().updatedAt?.toDate() || new Date()
+                };
+                this.posts.push(post);
+                
+                // Extract categories
+                if (post.categories && Array.isArray(post.categories)) {
+                    post.categories.forEach(cat => this.categories.add(cat));
+                }
+                
+                // Extract years
+                const year = post.createdAt.getFullYear().toString();
+                this.years.add(year);
+            });
+            
+            this.filteredPosts = [...this.posts];
+            this.renderCategories();
+            this.renderYears();
+            this.renderPosts();
+            this.attachPostListeners();
+            
+        } catch (error) {
+            console.error('Error loading posts:', error);
+            this.showError('Failed to load posts. Please try again.');
         }
     }
 
     renderCategories() {
-        const container = document.getElementById('categoriesContainer');
-        if (!container) return;
-
-        const categories = ['All', ...this.categories.map(c => c.name)];
+        const categoryList = document.getElementById('category-list');
+        if (!categoryList) return;
         
-        container.innerHTML = categories.map(category => `
-            <button class="category-badge ${category === 'All' && !this.currentFilter.category ? 'active' : ''}"
-                    data-category="${category === 'All' ? '' : category}">
-                ${category}
-            </button>
-        `).join('');
-
-        // Add event listeners
-        container.querySelectorAll('.category-badge').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const category = e.currentTarget.dataset.category || null;
-                this.currentFilter.category = category;
-                this.currentFilter.page = 1;
-                
-                // Update active state
-                container.querySelectorAll('.category-badge').forEach(b => b.classList.remove('active'));
-                e.currentTarget.classList.add('active');
-                
-                this.loadPosts();
-            });
+        let html = '<button class="category-btn active" data-category="all">All Posts</button>';
+        
+        this.categories.forEach(category => {
+            if (category !== 'All Posts') {
+                html += `<button class="category-btn" data-category="${category}">${category}</button>`;
+            }
         });
-    }
-
-    async loadYears() {
-        try {
-            const snapshot = await firebaseServices.db.collection('posts')
-                .where('published', '==', true)
-                .select('createdAt')
-                .get();
-            
-            const years = new Set();
-            snapshot.docs.forEach(doc => {
-                const date = doc.data().createdAt?.toDate();
-                if (date) {
-                    years.add(date.getFullYear());
-                }
-            });
-            
-            this.years = Array.from(years).sort((a, b) => b - a);
-            this.renderYears();
-        } catch (error) {
-            console.error('Error loading years:', error);
-        }
+        
+        categoryList.innerHTML = html;
     }
 
     renderYears() {
-        const select = document.getElementById('yearFilter');
-        if (!select) return;
-
-        this.years.forEach(year => {
-            const option = document.createElement('option');
-            option.value = year;
-            option.textContent = year;
-            select.appendChild(option);
-        });
-    }
-
-    async loadPosts(loadMore = false) {
-        const postsGrid = document.getElementById('postsGrid');
-        const loadMoreContainer = document.getElementById('loadMoreContainer');
-        const noResults = document.getElementById('noResults');
-
-        if (!loadMore) {
-            postsGrid.innerHTML = `
-                <div class="col-span-full flex justify-center items-center py-12">
-                    <div class="text-center">
-                        <div class="w-16 h-16 border-4 border-emberflare-200 border-t-emberflare-600 rounded-full animate-spin mx-auto mb-4"></div>
-                        <p class="text-gray-600">Loading posts...</p>
-                    </div>
-                </div>
-            `;
-        }
-
-        try {
-            let query = firebaseServices.db.collection('posts')
-                .where('published', '==', true)
-                .orderBy('createdAt', 'desc');
-
-            // Apply filters
-            if (this.currentFilter.category) {
-                query = query.where('category', '==', this.currentFilter.category);
-            }
-
-            if (this.currentFilter.year) {
-                const startDate = new Date(this.currentFilter.year, 0, 1);
-                const endDate = new Date(this.currentFilter.year + 1, 0, 1);
-                query = query.where('createdAt', '>=', startDate)
-                             .where('createdAt', '<', endDate);
-            }
-
-            // Pagination
-            if (loadMore && this.lastVisible) {
-                query = query.startAfter(this.lastVisible);
-            }
-
-            query = query.limit(this.currentFilter.limit);
-
-            const snapshot = await query.get();
-            
-            if (snapshot.empty) {
-                if (!loadMore) {
-                    postsGrid.innerHTML = '';
-                    noResults.classList.remove('hidden');
-                }
-                this.hasMorePosts = false;
-                loadMoreContainer.classList.add('hidden');
-                return;
-            }
-
-            noResults.classList.add('hidden');
-            this.lastVisible = snapshot.docs[snapshot.docs.length - 1];
-            this.hasMorePosts = snapshot.docs.length === this.currentFilter.limit;
-
-            const posts = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                createdAt: doc.data().createdAt?.toDate()
-            }));
-
-            // Apply search filter
-            if (this.currentFilter.search) {
-                const searchLower = this.currentFilter.search.toLowerCase();
-                const filtered = posts.filter(post => 
-                    post.title.toLowerCase().includes(searchLower) ||
-                    post.excerpt.toLowerCase().includes(searchLower) ||
-                    post.content.toLowerCase().includes(searchLower) ||
-                    post.category.toLowerCase().includes(searchLower)
-                );
-                this.filteredPosts = loadMore ? [...this.filteredPosts, ...filtered] : filtered;
-            } else {
-                this.filteredPosts = loadMore ? [...this.filteredPosts, ...posts] : posts;
-            }
-
-            this.renderPosts(loadMore);
-            loadMoreContainer.classList.toggle('hidden', !this.hasMorePosts);
-
-        } catch (error) {
-            console.error('Error loading posts:', error);
-            this.showToast('Error loading posts', 'error');
-        }
-    }
-
-    renderPosts(append = false) {
-        const postsGrid = document.getElementById('postsGrid');
+        const yearFilter = document.getElementById('year-filter');
+        if (!yearFilter) return;
         
-        if (!append) {
-            postsGrid.innerHTML = '';
-        }
+        let html = '<option value="all">All Years</option>';
+        
+        Array.from(this.years)
+            .sort((a, b) => b - a)
+            .forEach(year => {
+                if (year !== 'All Years') {
+                    html += `<option value="${year}">${year}</option>`;
+                }
+            });
+        
+        yearFilter.innerHTML = html;
+    }
 
+    renderPosts() {
+        const postsGrid = document.getElementById('posts-grid');
+        if (!postsGrid) return;
+        
         if (this.filteredPosts.length === 0) {
             postsGrid.innerHTML = `
-                <div class="col-span-full text-center py-12">
-                    <i class="fas fa-search text-4xl text-gray-300 mb-4"></i>
-                    <h3 class="text-xl font-semibold text-gray-700 mb-2">No posts found</h3>
-                    <p class="text-gray-500">Try adjusting your search or filters</p>
+                <div class="no-posts">
+                    <h3>No posts found</h3>
+                    <p>Try changing your search or filters</p>
                 </div>
             `;
             return;
         }
-
-        const postsToRender = append ? 
-            this.filteredPosts.slice(-this.currentFilter.limit) : 
-            this.filteredPosts;
-
-        postsToRender.forEach(post => {
-            const postElement = this.createPostElement(post);
-            postsGrid.appendChild(postElement);
-        });
-
-        // Add intersection observer for lazy loading
-        this.setupLazyLoading();
-    }
-
-    createPostElement(post) {
-        const div = document.createElement('div');
-        div.className = 'post-card animate-in';
-        div.innerHTML = `
-            <div class="post-image-container">
-                ${post.coverImage ? 
-                    `<img src="${post.coverImage}" 
-                          alt="${post.title}" 
-                          class="post-image lazy" 
-                          loading="lazy"
-                          onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjIwMCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIGZpbGw9IiM5Y2EzYWYiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='">` :
-                    `<div class="post-image bg-gray-200 flex items-center justify-center">
-                        <i class="fas fa-newspaper text-gray-400 text-4xl"></i>
-                    </div>`
-                }
-                <span class="category-badge absolute top-3 left-3">${post.category}</span>
-            </div>
-            <div class="post-content">
-                <h3 class="post-title">${post.title}</h3>
-                <p class="post-excerpt">${post.excerpt}</p>
-                <div class="post-meta">
-                    <div class="post-date">
-                        <i class="far fa-calendar"></i>
-                        ${this.formatDate(post.createdAt)}
+        
+        let html = '';
+        this.filteredPosts.forEach((post, index) => {
+            const category = post.categories?.[0] || 'Uncategorized';
+            const date = post.createdAt.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            html += `
+                <article class="post-card" data-id="${post.id}" style="animation-delay: ${index * 0.1}s">
+                    ${post.imageUrl ? `
+                        <div class="post-media-container">
+                            <img data-src="${post.imageUrl}" 
+                                 alt="${post.title}" 
+                                 class="post-media" 
+                                 loading="lazy">
+                            <div class="post-badge">${category}</div>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="post-content">
+                        <h2 class="post-title">${this.escapeHtml(post.title)}</h2>
+                        <p class="post-excerpt">${post.excerpt || this.truncateText(post.content, 150)}</p>
+                        <div class="post-meta">
+                            <div class="post-date">
+                                <i class="far fa-calendar"></i>
+                                ${date}
+                            </div>
+                            <button class="post-read-btn" data-id="${post.id}">
+                                Read <i class="fas fa-arrow-right"></i>
+                            </button>
+                        </div>
                     </div>
-                    <button class="read-more" data-post-id="${post.id}">
-                        Read more <i class="fas fa-arrow-right"></i>
-                    </button>
-                </div>
-            </div>
-        `;
-
-        // Add click event
-        div.querySelector('.read-more').addEventListener('click', (e) => {
-            e.preventDefault();
-            this.openFullscreenPost(post.id);
+                </article>
+            `;
         });
-
-        return div;
+        
+        postsGrid.innerHTML = html;
+        
+        // Initialize lazy loading for newly added images
+        this.initLazyLoading();
     }
 
-    async openFullscreenPost(postId) {
+    async loadPostDetail(postId) {
         try {
-            // Show loading state
-            document.getElementById('fullscreenPost').classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
-
-            const doc = await firebaseServices.db.collection('posts').doc(postId).get();
+            const postRef = db.collection('posts').doc(postId);
+            const doc = await postRef.get();
+            
             if (!doc.exists) {
                 throw new Error('Post not found');
             }
-
+            
             const post = {
                 id: doc.id,
                 ...doc.data(),
-                createdAt: doc.data().createdAt?.toDate()
+                createdAt: doc.data().createdAt?.toDate() || new Date()
             };
-
-            // Update URL
-            history.pushState({ postId }, '', `?post=${postId}`);
-
-            // Render post
-            this.renderFullscreenPost(post);
             
-            // Load comments
+            this.currentPost = post;
+            this.renderPostDetail(post);
+            this.openPostFullscreen();
             this.loadComments(postId);
-
+            this.loadLikes(postId);
+            
         } catch (error) {
             console.error('Error loading post:', error);
-            this.showToast('Error loading post', 'error');
-            this.closeFullscreenPost();
+            this.showError('Failed to load post. Please try again.');
         }
     }
 
-    renderFullscreenPost(post) {
-        const contentDiv = document.getElementById('postContent');
+    renderPostDetail(post) {
+        const content = document.getElementById('post-fullscreen-content');
+        if (!content) return;
         
-        // Format content (convert markdown to HTML if needed)
-        let content = post.content;
+        const date = post.createdAt.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+        const category = post.categories?.[0] || 'Uncategorized';
+        
+        let bodyHtml = post.content || '';
+        
+        // Convert Markdown to HTML if needed
         if (post.contentType === 'markdown') {
-            content = this.markdownToHtml(content);
+            bodyHtml = this.markdownToHtml(post.content);
         }
-
-        contentDiv.innerHTML = `
-            <article>
-                ${post.coverImage ? 
-                    `<img src="${post.coverImage}" 
-                          alt="${post.title}" 
-                          class="w-full h-auto rounded-2xl mb-8"
-                          loading="lazy">` : 
-                    ''
-                }
-                <h1>${post.title}</h1>
-                <div class="flex items-center gap-4 mb-8 text-gray-600">
-                    <span><i class="far fa-calendar mr-2"></i>${this.formatDate(post.createdAt)}</span>
-                    <span class="category-badge">${post.category}</span>
+        
+        const html = `
+            ${post.imageUrl ? `
+                <div class="post-fullscreen-media-container">
+                    <img src="${post.imageUrl}" 
+                         alt="${post.title}" 
+                         class="post-fullscreen-media">
                 </div>
-                ${content}
-            </article>
+            ` : ''}
+            
+            <h1 class="post-fullscreen-title">${this.escapeHtml(post.title)}</h1>
+            
+            <div class="post-fullscreen-meta">
+                <span><i class="far fa-calendar"></i> ${date}</span>
+                <span><i class="fas fa-tag"></i> ${category}</span>
+            </div>
+            
+            <div class="post-fullscreen-body">
+                ${bodyHtml}
+            </div>
+            
+            <div class="comments-section">
+                <h3 class="comments-title">Comments</h3>
+                
+                ${this.currentUser ? `
+                    <div class="comment-form">
+                        <textarea class="comment-input" 
+                                  id="comment-input" 
+                                  placeholder="Share your thoughts..."></textarea>
+                        <button class="comment-submit-btn" id="comment-submit">
+                            Post Comment
+                        </button>
+                    </div>
+                ` : '<p>Sign in to leave a comment.</p>'}
+                
+                <div class="comments-list" id="comments-list">
+                    <!-- Comments will be loaded here -->
+                </div>
+            </div>
+            
+            <div class="likes-display" id="likes-display">
+                <i class="fas fa-heart"></i>
+                <span class="like-count" id="like-count">0</span> likes
+            </div>
         `;
-
-        // Update page title
-        document.title = `${post.title} | Eldrex Writings`;
-    }
-
-    closeFullscreenPost() {
-        document.getElementById('fullscreenPost').classList.add('hidden');
-        document.body.style.overflow = 'auto';
-        history.replaceState(null, '', window.location.pathname);
-        document.title = 'Eldrex Writings | Personal Blog';
+        
+        content.innerHTML = html;
+        
+        // Add comment submit listener
+        const submitBtn = document.getElementById('comment-submit');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', () => this.submitComment(post.id));
+        }
     }
 
     async loadComments(postId) {
-        const commentsList = document.getElementById('commentsList');
-        const noComments = document.getElementById('noComments');
-
         try {
-            const snapshot = await firebaseServices.db.collection('comments')
-                .where('postId', '==', postId)
-                .where('approved', '==', true)
-                .orderBy('createdAt', 'desc')
-                .get();
-
-            if (snapshot.empty) {
-                commentsList.innerHTML = '';
-                noComments.classList.remove('hidden');
-                return;
+            const commentsRef = db.collection('posts').doc(postId).collection('comments')
+                .orderBy('createdAt', 'desc');
+            
+            const snapshot = await commentsRef.get();
+            const commentsList = document.getElementById('comments-list');
+            
+            if (!snapshot.empty) {
+                let html = '';
+                snapshot.forEach(doc => {
+                    const comment = doc.data();
+                    const date = comment.createdAt?.toDate() || new Date();
+                    
+                    html += `
+                        <div class="comment-item" data-id="${doc.id}">
+                            <div class="comment-header">
+                                <div class="comment-author">
+                                    <span class="comment-author-name">
+                                        ${this.escapeHtml(comment.authorName || 'Anonymous')}
+                                    </span>
+                                    ${comment.isAdmin ? `
+                                        <span class="admin-badge">
+                                            <i class="fas fa-check-circle"></i>
+                                            Admin
+                                        </span>
+                                    ` : ''}
+                                </div>
+                                <span class="comment-date">
+                                    ${date.toLocaleDateString()}
+                                </span>
+                            </div>
+                            <div class="comment-content">
+                                ${this.escapeHtml(comment.content)}
+                            </div>
+                            ${comment.userId === this.currentUser?.uid ? `
+                                <div class="comment-actions">
+                                    <button class="delete-btn" data-id="${doc.id}">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                
+                commentsList.innerHTML = html;
+                
+                // Add delete listeners
+                document.querySelectorAll('.delete-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const commentId = e.currentTarget.dataset.id;
+                        this.deleteComment(postId, commentId);
+                    });
+                });
             }
-
-            noComments.classList.add('hidden');
-            commentsList.innerHTML = '';
-
-            snapshot.docs.forEach(doc => {
-                const comment = {
-                    id: doc.id,
-                    ...doc.data(),
-                    createdAt: doc.data().createdAt?.toDate()
-                };
-                commentsList.appendChild(this.createCommentElement(comment));
-            });
-
+            
         } catch (error) {
             console.error('Error loading comments:', error);
         }
     }
 
-    createCommentElement(comment) {
-        const div = document.createElement('div');
-        div.className = 'comment animate-in';
-        
-        const isAdmin = comment.isAdmin;
-        const displayName = isAdmin ? 
-            `Eldrex Delos Reyes Bula <img src="https://eldrex.landecs.org/verified/badge.png" class="admin-badge" alt="Verified">` :
-            (comment.username || 'Anonymous');
-        
-        div.innerHTML = `
-            <div class="comment-header">
-                <div class="comment-user">
-                    <div class="user-avatar">
-                        ${displayName.charAt(0).toUpperCase()}
-                    </div>
-                    <span class="font-semibold text-gray-900">${displayName}</span>
-                </div>
-                <span class="comment-time">${this.formatTimeAgo(comment.createdAt)}</span>
-            </div>
-            <div class="comment-content">${comment.content}</div>
-            ${!isAdmin && comment.userId === this.currentUser.id ? `
-                <div class="comment-actions">
-                    <button class="text-red-600 text-sm hover:text-red-700 delete-comment" data-comment-id="${comment.id}">
-                        <i class="fas fa-trash mr-1"></i>Delete
-                    </button>
-                </div>
-            ` : ''}
-        `;
-
-        // Add delete event listener
-        const deleteBtn = div.querySelector('.delete-comment');
-        if (deleteBtn) {
-            deleteBtn.addEventListener('click', () => this.deleteComment(comment.id));
-        }
-
-        return div;
-    }
-
-    async submitComment() {
-        const postId = this.getCurrentPostId();
-        const content = document.getElementById('commentInput').value.trim();
+    async submitComment(postId) {
+        const input = document.getElementById('comment-input');
+        const content = input?.value.trim();
         
         if (!content) {
-            this.showToast('Please enter a comment', 'warning');
+            this.showToast('Please enter a comment', 'error');
             return;
         }
-
-        // Check if user needs to set username
-        if (!this.currentUser.username) {
-            this.showUsernameModal();
+        
+        if (!this.currentUser) {
+            this.showToast('Please sign in to comment', 'error');
             return;
         }
-
+        
         try {
-            const comment = {
-                postId,
-                userId: this.currentUser.id,
-                username: this.currentUser.username,
-                content,
-                approved: true, // Auto-approve for now
-                isAdmin: false,
-                createdAt: firebaseServices.firestore.FieldValue.serverTimestamp(),
-                updatedAt: firebaseServices.firestore.FieldValue.serverTimestamp()
-            };
-
-            // Check for restricted content
-            if (this.containsRestrictedContent(content)) {
-                comment.approved = false;
-                comment.moderated = true;
-                comment.moderationReason = 'Contains restricted content';
+            // Get username from local storage
+            const username = localStorage.getItem('blog_username') || 'Anonymous';
+            
+            // Check for restricted usernames
+            if (this.isRestrictedUsername(username)) {
+                this.showToast('This username is not allowed', 'error');
+                return;
             }
-
-            await firebaseServices.db.collection('comments').add(comment);
+            
+            // Content moderation
+            if (this.containsSensitiveContent(content)) {
+                this.showToast('Comment contains sensitive content', 'error');
+                return;
+            }
+            
+            const comment = {
+                content: content,
+                authorName: username,
+                userId: this.currentUser.uid,
+                postId: postId,
+                isAdmin: false,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            const commentRef = await db.collection('posts').doc(postId).collection('comments').add(comment);
             
             // Clear input
-            document.getElementById('commentInput').value = '';
+            input.value = '';
             
             // Reload comments
             this.loadComments(postId);
             
             this.showToast('Comment posted successfully', 'success');
-
+            analytics.logEvent('comment_posted', { post_id: postId });
+            
         } catch (error) {
             console.error('Error posting comment:', error);
-            this.showToast('Error posting comment', 'error');
+            this.showToast('Failed to post comment', 'error');
         }
     }
 
-    containsRestrictedContent(text) {
-        const restrictedTerms = [
-            'eldrex', 'bula', 'delos reyes', 
-            'eldrex delos reyes bula'
-        ];
-        
-        const lowerText = text.toLowerCase();
-        return restrictedTerms.some(term => lowerText.includes(term));
-    }
-
-    async deleteComment(commentId) {
+    async deleteComment(postId, commentId) {
         if (!confirm('Are you sure you want to delete this comment?')) {
             return;
         }
-
+        
         try {
-            const commentRef = firebaseServices.db.collection('comments').doc(commentId);
-            const commentDoc = await commentRef.get();
-            
-            if (!commentDoc.exists) {
-                throw new Error('Comment not found');
-            }
-
-            const comment = commentDoc.data();
-            if (comment.userId !== this.currentUser.id) {
-                throw new Error('Unauthorized');
-            }
-
-            await commentRef.delete();
+            await db.collection('posts').doc(postId).collection('comments').doc(commentId).delete();
+            this.loadComments(postId);
             this.showToast('Comment deleted', 'success');
-            this.loadComments(this.getCurrentPostId());
-
+            
         } catch (error) {
             console.error('Error deleting comment:', error);
-            this.showToast('Error deleting comment', 'error');
+            this.showToast('Failed to delete comment', 'error');
         }
     }
 
-    getCurrentPostId() {
-        const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get('post');
+    async loadLikes(postId) {
+        try {
+            const likesRef = rtdb.ref(`likes/${postId}`);
+            
+            // Get current like count
+            const snapshot = await likesRef.once('value');
+            const likes = snapshot.val() || {};
+            const likeCount = Object.keys(likes).length;
+            
+            // Update display
+            const likeCountElement = document.getElementById('like-count');
+            if (likeCountElement) {
+                likeCountElement.textContent = likeCount;
+            }
+            
+            // Check if current user liked the post
+            if (this.currentUser) {
+                const userLikeRef = rtdb.ref(`likes/${postId}/${this.currentUser.uid}`);
+                userLikeRef.on('value', (snap) => {
+                    const likeBtn = document.getElementById('like-btn');
+                    if (likeBtn) {
+                        likeBtn.classList.toggle('liked', snap.exists());
+                    }
+                });
+            }
+            
+            // Setup like button listener
+            this.setupLikeButton(postId);
+            
+        } catch (error) {
+            console.error('Error loading likes:', error);
+        }
     }
 
-    openSettings() {
-        const panel = document.getElementById('settingsPanel');
-        panel.classList.remove('hidden');
-        document.getElementById('usernameInput').value = this.currentUser.username || '';
+    async toggleLike(postId) {
+        if (!this.currentUser) {
+            this.showToast('Please sign in to like posts', 'error');
+            return;
+        }
         
-        setTimeout(() => {
-            panel.querySelector('.absolute.bottom-0').style.transform = 'translateY(0)';
-        }, 10);
+        try {
+            const userLikeRef = rtdb.ref(`likes/${postId}/${this.currentUser.uid}`);
+            const snapshot = await userLikeRef.once('value');
+            
+            if (snapshot.exists()) {
+                // Unlike
+                await userLikeRef.remove();
+                analytics.logEvent('post_unliked', { post_id: postId });
+            } else {
+                // Like
+                await userLikeRef.set({
+                    timestamp: Date.now(),
+                    userId: this.currentUser.uid
+                });
+                analytics.logEvent('post_liked', { post_id: postId });
+            }
+            
+        } catch (error) {
+            console.error('Error toggling like:', error);
+            this.showToast('Failed to update like', 'error');
+        }
     }
 
-    closeSettings() {
-        const panel = document.getElementById('settingsPanel');
-        panel.querySelector('.absolute.bottom-0').style.transform = 'translateY(100%)';
-        setTimeout(() => {
-            panel.classList.add('hidden');
-        }, 300);
+    filterPosts() {
+        let filtered = [...this.posts];
+        
+        // Apply category filter
+        if (this.currentFilters.category !== 'all') {
+            filtered = filtered.filter(post => 
+                post.categories?.includes(this.currentFilters.category)
+            );
+        }
+        
+        // Apply year filter
+        if (this.currentFilters.year !== 'all') {
+            filtered = filtered.filter(post => 
+                post.createdAt.getFullYear().toString() === this.currentFilters.year
+            );
+        }
+        
+        // Apply search filter
+        if (this.currentFilters.search) {
+            const searchTerm = this.currentFilters.search.toLowerCase();
+            filtered = filtered.filter(post => 
+                post.title.toLowerCase().includes(searchTerm) ||
+                post.content.toLowerCase().includes(searchTerm) ||
+                post.categories?.some(cat => cat.toLowerCase().includes(searchTerm))
+            );
+        }
+        
+        this.filteredPosts = filtered;
+        this.renderPosts();
+        this.attachPostListeners();
+    }
+
+    setupEventListeners() {
+        // Category filter
+        document.getElementById('category-list')?.addEventListener('click', (e) => {
+            if (e.target.classList.contains('category-btn')) {
+                document.querySelectorAll('.category-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                e.target.classList.add('active');
+                
+                this.currentFilters.category = e.target.dataset.category;
+                this.filterPosts();
+                analytics.logEvent('category_filter', { category: e.target.dataset.category });
+            }
+        });
+        
+        // Year filter
+        document.getElementById('year-filter')?.addEventListener('change', (e) => {
+            this.currentFilters.year = e.target.value;
+            this.filterPosts();
+            analytics.logEvent('year_filter', { year: e.target.value });
+        });
+        
+        // Search
+        document.getElementById('search-btn')?.addEventListener('click', () => {
+            this.currentFilters.search = document.getElementById('search-input').value;
+            this.filterPosts();
+            analytics.logEvent('search', { term: this.currentFilters.search });
+        });
+        
+        document.getElementById('search-input')?.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                this.currentFilters.search = e.target.value;
+                this.filterPosts();
+                analytics.logEvent('search', { term: e.target.value });
+            }
+        });
+        
+        // Clear filters
+        document.getElementById('clear-filters')?.addEventListener('click', () => {
+            this.currentFilters = {
+                category: 'all',
+                year: 'all',
+                search: ''
+            };
+            
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.category === 'all');
+            });
+            
+            document.getElementById('search-input').value = '';
+            document.getElementById('year-filter').value = 'all';
+            
+            this.filterPosts();
+            analytics.logEvent('clear_filters');
+        });
+        
+        // Settings panel
+        document.getElementById('settings-toggle')?.addEventListener('click', () => {
+            this.openSettingsPanel();
+        });
+        
+        document.getElementById('close-settings')?.addEventListener('click', () => {
+            this.closeSettingsPanel();
+        });
+        
+        // Fullscreen post
+        document.getElementById('post-fullscreen-back')?.addEventListener('click', () => {
+            this.closePostFullscreen();
+        });
+        
+        document.getElementById('post-fullscreen-share')?.addEventListener('click', () => {
+            this.sharePost();
+        });
+        
+        // Username settings
+        document.getElementById('save-username')?.addEventListener('click', () => {
+            this.saveUsername();
+        });
+        
+        document.getElementById('remove-username')?.addEventListener('click', () => {
+            this.removeUsername();
+        });
+        
+        document.getElementById('clear-data')?.addEventListener('click', () => {
+            this.clearLocalData();
+        });
+        
+        // Legal pages (placeholder)
+        ['privacy-policy', 'terms-of-use', 'license'].forEach(id => {
+            document.getElementById(id)?.addEventListener('click', () => {
+                this.showToast('Legal pages coming soon', 'info');
+            });
+        });
+    }
+
+    attachPostListeners() {
+        document.querySelectorAll('.post-read-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const postId = e.currentTarget.dataset.id;
+                this.loadPostDetail(postId);
+            });
+        });
+        
+        document.querySelectorAll('.post-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                if (!e.target.closest('.post-read-btn')) {
+                    const postId = card.dataset.id;
+                    this.loadPostDetail(postId);
+                }
+            });
+        });
+    }
+
+    setupLikeButton(postId) {
+        const likeBtn = document.createElement('button');
+        likeBtn.id = 'like-btn';
+        likeBtn.className = 'like-btn';
+        likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
+        
+        likeBtn.addEventListener('click', () => {
+            this.toggleLike(postId);
+        });
+        
+        const likesDisplay = document.getElementById('likes-display');
+        if (likesDisplay) {
+            likesDisplay.appendChild(likeBtn);
+        }
+    }
+
+    openPostFullscreen() {
+        document.getElementById('post-fullscreen').classList.add('active');
+        document.body.classList.add('no-scroll');
+        
+        // Update URL
+        if (this.currentPost?.slug) {
+            history.pushState({ postId: this.currentPost.id }, '', `/${this.currentPost.slug}`);
+        } else if (this.currentPost) {
+            history.pushState({ postId: this.currentPost.id }, '', `?post=${this.currentPost.id}`);
+        }
+    }
+
+    closePostFullscreen() {
+        document.getElementById('post-fullscreen').classList.remove('active');
+        document.body.classList.remove('no-scroll');
+        history.replaceState(null, '', '/');
+    }
+
+    openSettingsPanel() {
+        document.getElementById('settings-panel').classList.add('active');
+        document.body.classList.add('no-scroll');
+    }
+
+    closeSettingsPanel() {
+        document.getElementById('settings-panel').classList.remove('active');
+        document.body.classList.remove('no-scroll');
     }
 
     saveUsername() {
-        const username = document.getElementById('usernameInput').value.trim();
+        const input = document.getElementById('username-input');
+        const username = input?.value.trim();
         
-        if (username && this.containsRestrictedContent(username)) {
-            this.showToast('Username contains restricted terms', 'error');
+        if (!username) {
+            this.showToast('Please enter a username', 'error');
             return;
         }
-
-        this.currentUser.username = username || null;
-        localStorage.setItem('blog_user', JSON.stringify(this.currentUser));
         
-        // Update display
-        document.getElementById('currentUsername').textContent = username || 'Anonymous';
+        if (this.isRestrictedUsername(username)) {
+            this.showToast('This username is not allowed', 'error');
+            return;
+        }
         
+        localStorage.setItem('blog_username', username);
         this.showToast('Username saved', 'success');
-        this.closeSettings();
+        analytics.logEvent('username_set');
     }
 
     removeUsername() {
-        this.currentUser.username = null;
-        localStorage.setItem('blog_user', JSON.stringify(this.currentUser));
-        document.getElementById('currentUsername').textContent = 'Anonymous';
-        document.getElementById('usernameInput').value = '';
+        localStorage.removeItem('blog_username');
+        document.getElementById('username-input').value = '';
         this.showToast('Username removed', 'success');
+        analytics.logEvent('username_removed');
     }
 
-    showUsernameModal() {
-        document.getElementById('usernameModal').classList.remove('hidden');
-    }
-
-    hideUsernameModal() {
-        document.getElementById('usernameModal').classList.add('hidden');
-    }
-
-    useAnonymous() {
-        this.hideUsernameModal();
-        // Try submitting comment again
-        setTimeout(() => this.submitComment(), 100);
-    }
-
-    saveModalUsername() {
-        const username = document.getElementById('modalUsernameInput').value.trim();
-        
-        if (username && this.containsRestrictedContent(username)) {
-            this.showToast('Username contains restricted terms', 'error');
-            return;
+    loadUserPreferences(userId) {
+        const username = localStorage.getItem('blog_username');
+        if (username && document.getElementById('username-input')) {
+            document.getElementById('username-input').value = username;
         }
-
-        this.currentUser.username = username || null;
-        localStorage.setItem('blog_user', JSON.stringify(this.currentUser));
-        document.getElementById('currentUsername').textContent = username || 'Anonymous';
-        
-        this.hideUsernameModal();
-        // Try submitting comment again
-        setTimeout(() => this.submitComment(), 100);
     }
 
-    shareCurrentPost() {
-        const postId = this.getCurrentPostId();
-        if (!postId) return;
+    clearLocalData() {
+        if (confirm('Clear all local data (username, preferences)?')) {
+            localStorage.clear();
+            location.reload();
+        }
+    }
 
-        const url = `${window.location.origin}${window.location.pathname}?post=${postId}`;
+    async sharePost() {
+        if (!this.currentPost) return;
+        
+        const shareData = {
+            title: this.currentPost.title,
+            text: this.currentPost.excerpt || this.truncateText(this.currentPost.content, 100),
+            url: window.location.href
+        };
         
         if (navigator.share) {
-            navigator.share({
-                title: document.querySelector('#postContent h1')?.textContent || 'Eldrex Writings',
-                text: 'Check out this post on Eldrex Writings',
-                url: url
-            });
+            try {
+                await navigator.share(shareData);
+                analytics.logEvent('post_shared', { post_id: this.currentPost.id });
+            } catch (error) {
+                console.error('Error sharing:', error);
+            }
         } else {
-            navigator.clipboard.writeText(url);
+            // Fallback: copy to clipboard
+            await navigator.clipboard.writeText(shareData.url);
             this.showToast('Link copied to clipboard', 'success');
         }
     }
 
-    setupRealtimeUpdates() {
-        // Listen for new comments
-        firebaseServices.db.collection('comments')
-            .where('approved', '==', true)
-            .onSnapshot((snapshot) => {
-                snapshot.docChanges().forEach((change) => {
-                    if (change.type === 'added') {
-                        const postId = change.doc.data().postId;
-                        if (postId === this.getCurrentPostId()) {
-                            this.loadComments(postId);
-                        }
-                    }
-                });
-            });
+    // Utility methods
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
-    setupLazyLoading() {
-        const lazyImages = document.querySelectorAll('img.lazy');
-        
-        if ('IntersectionObserver' in window) {
-            const imageObserver = new IntersectionObserver((entries) => {
-                entries.forEach((entry) => {
-                    if (entry.isIntersecting) {
-                        const img = entry.target;
-                        img.src = img.dataset.src;
-                        img.classList.remove('lazy');
-                        imageObserver.unobserve(img);
-                    }
-                });
-            });
-
-            lazyImages.forEach(img => imageObserver.observe(img));
-        }
+    truncateText(text, length) {
+        if (!text) return '';
+        return text.length > length ? text.substring(0, length) + '...' : text;
     }
 
     markdownToHtml(markdown) {
-        // Simple markdown converter
+        // Simple markdown to HTML converter
         return markdown
             .replace(/^### (.*$)/gim, '<h3>$1</h3>')
             .replace(/^## (.*$)/gim, '<h2>$1</h2>')
             .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-            .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-            .replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2" target="_blank">$1</a>')
+            .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+            .replace(/\*(.*)\*/gim, '<em>$1</em>')
+            .replace(/!\[(.*?)\]\((.*?)\)/gim, '<img src="$2" alt="$1">')
+            .replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2">$1</a>')
             .replace(/\n\n/gim, '</p><p>')
-            .replace(/!\[(.*?)\]\((.*?)\)/gim, '<img src="$2" alt="$1" class="rounded-lg my-4">');
+            .replace(/\n/gim, '<br>');
     }
 
-    formatDate(date) {
-        if (!date) return '';
-        return new Date(date).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
+    isRestrictedUsername(username) {
+        const restricted = [
+            'eldrex',
+            'delos reyes',
+            'bula',
+            'admin',
+            'administrator',
+            'moderator'
+        ];
+        
+        const lowerUsername = username.toLowerCase();
+        return restricted.some(restrictedName => 
+            lowerUsername.includes(restrictedName) || 
+            restrictedName.includes(lowerUsername)
+        );
+    }
+
+    containsSensitiveContent(text) {
+        // Simple content moderation
+        const sensitivePatterns = [
+            /\b(hate|violence|attack|kill)\b/i,
+            /racial.*slur/i,
+            /explicit.*content/i
+        ];
+        
+        return sensitivePatterns.some(pattern => pattern.test(text));
+    }
+
+    setupLazyLoading() {
+        this.observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    img.src = img.dataset.src;
+                    img.classList.add('loaded');
+                    this.observer.unobserve(img);
+                }
+            });
+        }, {
+            rootMargin: '50px',
+            threshold: 0.1
         });
     }
 
-    formatTimeAgo(date) {
-        if (!date) return '';
-        
-        const seconds = Math.floor((new Date() - date) / 1000);
-        
-        let interval = Math.floor(seconds / 31536000);
-        if (interval >= 1) return interval + ' year' + (interval === 1 ? '' : 's') + ' ago';
-        
-        interval = Math.floor(seconds / 2592000);
-        if (interval >= 1) return interval + ' month' + (interval === 1 ? '' : 's') + ' ago';
-        
-        interval = Math.floor(seconds / 86400);
-        if (interval >= 1) return interval + ' day' + (interval === 1 ? '' : 's') + ' ago';
-        
-        interval = Math.floor(seconds / 3600);
-        if (interval >= 1) return interval + ' hour' + (interval === 1 ? '' : 's') + ' ago';
-        
-        interval = Math.floor(seconds / 60);
-        if (interval >= 1) return interval + ' minute' + (interval === 1 ? '' : 's') + ' ago';
-        
-        return 'Just now';
+    initLazyLoading() {
+        document.querySelectorAll('img[data-src]').forEach(img => {
+            this.observer?.observe(img);
+        });
+    }
+
+    showError(message) {
+        const postsGrid = document.getElementById('posts-grid');
+        if (postsGrid) {
+            postsGrid.innerHTML = `
+                <div class="no-posts">
+                    <h3>Error</h3>
+                    <p>${message}</p>
+                    <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem;">
+                        Retry
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    showNoPosts() {
+        const postsGrid = document.getElementById('posts-grid');
+        if (postsGrid) {
+            postsGrid.innerHTML = `
+                <div class="no-posts">
+                    <h3>No posts yet</h3>
+                    <p>Check back later for new content.</p>
+                </div>
+            `;
+        }
     }
 
     showToast(message, type = 'info') {
-        // Remove existing toasts
-        document.querySelectorAll('.toast').forEach(toast => toast.remove());
+        // Remove existing toast
+        const existingToast = document.querySelector('.toast');
+        if (existingToast) existingToast.remove();
         
-        const colors = {
-            success: 'bg-green-500',
-            error: 'bg-red-500',
-            warning: 'bg-yellow-500',
-            info: 'bg-emberflare-600'
-        };
-        
+        // Create new toast
         const toast = document.createElement('div');
-        toast.className = `toast ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg`;
+        toast.className = `toast toast-${type}`;
         toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            background: ${type === 'error' ? 'var(--emberflare-400)' : 'var(--primary)'};
+            color: white;
+            border-radius: var(--border-radius-md);
+            z-index: 9999;
+            animation: slideIn 0.3s ease-out;
+        `;
         
         document.body.appendChild(toast);
         
+        // Auto remove after 3 seconds
         setTimeout(() => {
-            toast.remove();
+            toast.style.animation = 'slideOut 0.3s ease-out forwards';
+            setTimeout(() => toast.remove(), 300);
         }, 3000);
     }
 }
 
-// Utility functions
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
 // Initialize blog when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    // Check if Firebase config is loaded
-    if (!window.FIREBASE_API_KEY) {
-        console.error('Firebase configuration not found');
-        return;
-    }
-    
-    // Initialize blog platform
-    window.blog = new BlogPlatform();
+    const blog = new BlogManager();
     
     // Handle browser navigation
-    window.addEventListener('popstate', () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const postId = urlParams.get('post');
-        
-        if (postId && window.blog) {
-            window.blog.openFullscreenPost(postId);
-        } else if (window.blog) {
-            window.blog.closeFullscreenPost();
+    window.addEventListener('popstate', (event) => {
+        if (event.state?.postId) {
+            blog.loadPostDetail(event.state.postId);
+        } else {
+            blog.closePostFullscreen();
         }
     });
+    
+    // Make blog instance globally available for debugging
+    window.blog = blog;
 });
