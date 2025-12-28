@@ -1040,10 +1040,16 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
     
-    <!-- Blog Script -->
-    <script src="js/firebase-config.js"></script>
-    <script src="js/blog.js"></script>
+    <script type="module">
+        import { initializeFirebase } from './js/firebase-config.js';
+        import BlogManager from './js/blog.js';
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeFirebase();
+            const blog = new BlogManager();
+            window.blog = blog;
+        });
+    </script>
 </body>
 </html>
