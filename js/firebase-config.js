@@ -1,15 +1,14 @@
 // js/firebase-config.js
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
 import { 
     getAuth, 
-    signInAnonymously, 
-    signOut,
     signInWithEmailAndPassword,
-    signInWithPopup,
-    GoogleAuthProvider,
-    onAuthStateChanged 
-} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+    signInAnonymously, 
+    signOut, 
+    onAuthStateChanged,
+    updateProfile
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { 
     getFirestore,
     collection,
@@ -19,18 +18,25 @@ import {
     limit,
     startAfter,
     getDocs,
-    doc,
     getDoc,
+    doc,
     setDoc,
     updateDoc,
     deleteDoc,
     addDoc,
     serverTimestamp,
-    Timestamp,
-    runTransaction
-} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+    increment,
+    writeBatch
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { 
+    getStorage,
+    ref,
+    uploadBytes,
+    getDownloadURL,
+    deleteObject
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
-// Firebase Configuration
+// Your web app's Firebase configuration
 const firebaseConfig = {
     apiKey: "AIzaSyChd3wKk1KXZNZQs8fDZRiUFbelciQnT1w",
     authDomain: "eldrex-blog.firebaseapp.com",
@@ -46,22 +52,22 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
+const storage = getStorage(app);
 
-// Export Firebase services
+// Export all Firebase services
 export {
     app,
     analytics,
     auth,
     db,
-    googleProvider,
-    // Auth Methods
-    signInAnonymously,
+    storage,
+    // Auth
     signInWithEmailAndPassword,
-    signInWithPopup,
+    signInAnonymously,
     signOut,
     onAuthStateChanged,
-    // Firestore Methods
+    updateProfile,
+    // Firestore
     collection,
     query,
     where,
@@ -69,15 +75,18 @@ export {
     limit,
     startAfter,
     getDocs,
-    doc,
     getDoc,
+    doc,
     setDoc,
     updateDoc,
     deleteDoc,
     addDoc,
     serverTimestamp,
-    Timestamp,
-    runTransaction,
-    // Other
-    GoogleAuthProvider
+    increment,
+    writeBatch,
+    // Storage
+    ref,
+    uploadBytes,
+    getDownloadURL,
+    deleteObject
 };
