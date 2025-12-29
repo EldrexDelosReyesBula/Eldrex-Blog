@@ -68,7 +68,178 @@
         }
     </script>
     
-    <link rel="stylesheet" href="/css/styles.css">
+ <style> 
+ /* css/styles.css */
+.glass-panel {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: rgba(255, 255, 255, 0.85);
+}
+
+.dark .glass-panel {
+    background: rgba(15, 15, 15, 0.85);
+}
+
+.category-scrollbar::-webkit-scrollbar {
+    height: 4px;
+}
+
+.category-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.category-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(214, 69, 69, 0.3);
+    border-radius: 2px;
+}
+
+.dark .category-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(214, 69, 69, 0.5);
+}
+
+.post-card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.post-card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(214, 69, 69, 0.1);
+}
+
+.dark .post-card-hover:hover {
+    box-shadow: 0 20px 40px rgba(214, 69, 69, 0.2);
+}
+
+.comment-enter {
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.blurred {
+    filter: blur(8px);
+    user-select: none;
+    pointer-events: none;
+    position: relative;
+}
+
+.blurred::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+.dark .blurred::before {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.material-symbols-outlined.fill {
+    font-variation-settings: 'FILL' 1;
+}
+
+/* Markdown preview styles */
+.prose {
+    color: #374151;
+}
+
+.dark .prose {
+    color: #d1d5db;
+}
+
+.prose h1, .prose h2, .prose h3 {
+    color: #111827;
+    font-weight: 700;
+}
+
+.dark .prose h1, .dark .prose h2, .dark .prose h3 {
+    color: #f3f4f6;
+}
+
+.prose p {
+    margin: 1em 0;
+    line-height: 1.7;
+}
+
+.prose a {
+    color: #d64545;
+    text-decoration: underline;
+}
+
+.prose blockquote {
+    border-left: 4px solid #d64545;
+    padding-left: 1em;
+    margin: 1em 0;
+    font-style: italic;
+    color: #6b7280;
+}
+
+.dark .prose blockquote {
+    color: #9ca3af;
+}
+
+.prose code {
+    background: #f3f4f6;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+.dark .prose code {
+    background: #374151;
+}
+
+.prose pre {
+    background: #f3f4f6;
+    padding: 1em;
+    border-radius: 5px;
+    overflow-x: auto;
+}
+
+.dark .prose pre {
+    background: #374151;
+}
+
+.prose ul {
+    list-style-type: disc;
+    padding-left: 2em;
+}
+
+.prose ol {
+    list-style-type: decimal;
+    padding-left: 2em;
+}
+
+.prose img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+}
+ </style>
 </head>
 <body class="bg-white dark:bg-emberflare-950 text-gray-900 dark:text-emberflare-100 font-sans transition-colors duration-300 min-h-screen">
     
