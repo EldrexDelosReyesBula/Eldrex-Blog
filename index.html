@@ -39,7 +39,6 @@
                         'slide-up': 'slideUp 0.4s ease-out',
                         'scale-in': 'scaleIn 0.2s ease-out',
                         'pulse-subtle': 'pulseSubtle 2s ease-in-out infinite',
-                        'bounce-subtle': 'bounceSubtle 0.5s ease-out',
                     },
                     keyframes: {
                         fadeIn: {
@@ -57,10 +56,6 @@
                         pulseSubtle: {
                             '0%, 100%': { opacity: '1' },
                             '50%': { opacity: '0.7' }
-                        },
-                        bounceSubtle: {
-                            '0%, 100%': { transform: 'translateY(0)' },
-                            '50%': { transform: 'translateY(-4px)' }
                         }
                     }
                 }
@@ -88,12 +83,12 @@
         }
         
         .category-scrollbar::-webkit-scrollbar-thumb {
-            background: var(--tw-color-emberflare-300);
+            background: #ffc2c2;
             border-radius: 2px;
         }
         
         .dark .category-scrollbar::-webkit-scrollbar-thumb {
-            background: var(--tw-color-emberflare-600);
+            background: #9b2f2f;
         }
         
         .post-card-hover {
@@ -113,25 +108,89 @@
             animation: slideUp 0.3s ease-out;
         }
         
-        .ripple {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(214, 69, 69, 0.4);
-            transform: scale(0);
-            animation: ripple 0.6s linear;
-        }
-        
-        @keyframes ripple {
-            to {
-                transform: scale(4);
-                opacity: 0;
-            }
-        }
-        
         .blurred {
             filter: blur(8px);
             user-select: none;
             pointer-events: none;
+            position: relative;
+        }
+        
+        .blurred::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(4px);
+        }
+        
+        .dark .blurred::after {
+            background: rgba(15, 15, 15, 0.7);
+        }
+        
+        .admin-badge {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            background: linear-gradient(45deg, #d64545, #b93a3a);
+            border-radius: 50%;
+            margin-left: 4px;
+            position: relative;
+        }
+        
+        .admin-badge::after {
+            content: '✓';
+            color: white;
+            font-size: 10px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+        }
+        
+        .prose {
+            color: inherit;
+        }
+        
+        .prose p {
+            margin-bottom: 1.5em;
+            line-height: 1.8;
+        }
+        
+        .prose h2 {
+            font-size: 1.75em;
+            font-weight: 700;
+            margin-top: 2em;
+            margin-bottom: 0.75em;
+        }
+        
+        .prose blockquote {
+            border-left: 4px solid #d64545;
+            padding-left: 1.5em;
+            margin: 2em 0;
+            font-style: italic;
+            color: #666;
+        }
+        
+        .dark .prose blockquote {
+            color: #999;
+        }
+        
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .line-clamp-3 {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
     </style>
 </head>
@@ -165,9 +224,9 @@
             <div class="mt-6 pt-6 border-t border-emberflare-200 dark:border-emberflare-800">
                 <p class="text-xs text-gray-500 dark:text-emberflare-400">
                     By continuing, you agree to our 
-                    <a href="terms.html" class="text-emberflare-600 dark:text-emberflare-400 hover:underline">Terms of Use</a> 
+                    <a href="privacy.html" class="text-emberflare-600 dark:text-emberflare-400 hover:underline">Privacy Policy</a> 
                     and 
-                    <a href="privacy.html" class="text-emberflare-600 dark:text-emberflare-400 hover:underline">Privacy Policy</a>.
+                    <a href="terms.html" class="text-emberflare-600 dark:text-emberflare-400 hover:underline">Terms of Use</a>.
                     Anonymous users can only read posts.
                 </p>
             </div>
@@ -190,10 +249,6 @@
                 <button id="settings-btn" onclick="openSettings()" class="p-2 hover:bg-emberflare-100 dark:hover:bg-emberflare-800 rounded-lg transition-colors relative" aria-label="Settings">
                     <span class="material-symbols-outlined">settings</span>
                 </button>
-                
-                <a href="admin.html" class="p-2 hover:bg-emberflare-100 dark:hover:bg-emberflare-800 rounded-lg transition-colors" aria-label="Admin">
-                    <span class="material-symbols-outlined">admin_panel_settings</span>
-                </a>
             </div>
         </div>
     </header>
@@ -294,7 +349,6 @@
                     <select id="year-filter" 
                             class="appearance-none bg-white dark:bg-emberflare-900 border-2 border-emberflare-200 dark:border-emberflare-800 rounded-xl pl-4 pr-10 py-3 focus:outline-none focus:border-emberflare-500 dark:focus:border-emberflare-400 transition-colors">
                         <option value="">All Years</option>
-                        <!-- Years will be populated dynamically -->
                     </select>
                     <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
                         expand_more
@@ -308,7 +362,6 @@
                                 class="category-btn px-4 py-2 bg-emberflare-500 text-white rounded-xl whitespace-nowrap font-medium">
                             All Posts
                         </button>
-                        <!-- Categories will be populated dynamically -->
                     </div>
                 </div>
             </div>
@@ -391,17 +444,52 @@
     </footer>
 
     <!-- Firebase SDK -->
-    <script type="module" src="/firebase-config.js"></script>
-    
-    <!-- Main App -->
     <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
         import { 
-            db, auth, analytics, 
-            signInAnonymously, onAuthStateChanged, signOut,
-            collection, query, where, orderBy, limit, getDocs, 
-            doc, getDoc, updateDoc, arrayUnion, arrayRemove,
-            onSnapshot, addDoc, deleteDoc, serverTimestamp 
-        } from './js/firebase-config.js';
+            getAuth, 
+            signInAnonymously, 
+            signOut, 
+            onAuthStateChanged,
+            GoogleAuthProvider,
+            signInWithPopup,
+            signInWithRedirect,
+            getRedirectResult
+        } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
+        import { 
+            getFirestore,
+            collection,
+            query,
+            where,
+            orderBy,
+            limit,
+            getDocs,
+            doc,
+            getDoc,
+            updateDoc,
+            addDoc,
+            deleteDoc,
+            serverTimestamp,
+            startAfter,
+            Timestamp
+        } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyChd3wKk1KXZNZQs8fDZRiUFbelciQnT1w",
+            authDomain: "eldrex-blog.firebaseapp.com",
+            projectId: "eldrex-blog",
+            storageBucket: "eldrex-blog.firebasestorage.app",
+            messagingSenderId: "1016235801394",
+            appId: "1:1016235801394:web:c1f8d532843db7bfd1b52b",
+            measurementId: "G-DHTY1BBPFP"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
         class BlogApp {
             constructor() {
@@ -415,6 +503,8 @@
                 this.currentCategory = '';
                 this.currentYear = '';
                 this.currentSearch = '';
+                this.postsPerPage = 9;
+                this.hasMorePosts = true;
                 
                 this.init();
             }
@@ -442,6 +532,14 @@
                         document.getElementById('auth-modal').classList.remove('hidden');
                     }, 1000);
                     localStorage.setItem('auth_shown', 'true');
+                }
+                
+                // Check for post in URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const postId = urlParams.get('post');
+                if (postId) {
+                    await this.loadPosts();
+                    setTimeout(() => this.openFullscreenPost(postId), 500);
                 }
             }
             
@@ -471,6 +569,37 @@
                     this.filterPosts();
                     this.updateClearSearchButton();
                 });
+                
+                // Handle back/forward navigation
+                window.addEventListener('popstate', (event) => {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const postId = urlParams.get('post');
+                    
+                    if (postId) {
+                        this.openFullscreenPost(postId);
+                    } else {
+                        this.closeFullscreenPost();
+                    }
+                });
+                
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        if (document.getElementById('post-fullscreen').classList.contains('hidden') === false) {
+                            this.closeFullscreenPost();
+                        } else if (document.getElementById('settings-panel').classList.contains('hidden') === false) {
+                            this.closeSettings();
+                        } else if (document.getElementById('auth-modal').classList.contains('hidden') === false) {
+                            this.closeAuthModal();
+                        }
+                    }
+                    
+                    // Ctrl/Cmd + / to focus search
+                    if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+                        e.preventDefault();
+                        document.getElementById('search-input').focus();
+                    }
+                });
             }
             
             updateClearSearchButton() {
@@ -479,7 +608,7 @@
             }
             
             async loadPosts(loadMore = false) {
-                if (this.isLoading) return;
+                if (this.isLoading || (loadMore && !this.hasMorePosts)) return;
                 
                 this.isLoading = true;
                 const loadingEl = document.getElementById('loading');
@@ -488,33 +617,45 @@
                 if (!loadMore) {
                     postsGrid.classList.add('hidden');
                     loadingEl.classList.remove('hidden');
-                    this.filteredPosts = [];
+                    this.posts = [];
+                    this.categories.clear();
+                    this.years.clear();
+                    this.lastVisible = null;
+                    this.hasMorePosts = true;
                 }
                 
                 try {
-                    let postsQuery = query(
-                        collection(db, 'posts'),
-                        where('published', '==', true),
-                        orderBy('createdAt', 'desc'),
-                        limit(loadMore ? 6 : 12)
-                    );
+                    let postsQuery;
                     
                     if (loadMore && this.lastVisible) {
-                        // Add startAfter for pagination
-                        // Note: In practice, you'd need to modify query for proper pagination
+                        postsQuery = query(
+                            collection(db, 'posts'),
+                            where('published', '==', true),
+                            orderBy('createdAt', 'desc'),
+                            startAfter(this.lastVisible),
+                            limit(this.postsPerPage)
+                        );
+                    } else {
+                        postsQuery = query(
+                            collection(db, 'posts'),
+                            where('published', '==', true),
+                            orderBy('createdAt', 'desc'),
+                            limit(this.postsPerPage)
+                        );
                     }
                     
                     const snapshot = await getDocs(postsQuery);
                     
-                    if (!loadMore) {
-                        this.posts = [];
+                    if (snapshot.empty) {
+                        this.hasMorePosts = false;
+                        return;
                     }
                     
-                    snapshot.forEach(doc => {
+                    snapshot.forEach(docSnap => {
                         const post = {
-                            id: doc.id,
-                            ...doc.data(),
-                            createdAt: doc.data().createdAt?.toDate() || new Date()
+                            id: docSnap.id,
+                            ...docSnap.data(),
+                            createdAt: docSnap.data().createdAt?.toDate() || new Date()
                         };
                         
                         if (!this.posts.find(p => p.id === post.id)) {
@@ -564,7 +705,8 @@
                         const titleMatch = post.title?.toLowerCase().includes(searchTerm);
                         const excerptMatch = post.excerpt?.toLowerCase().includes(searchTerm);
                         const categoryMatch = post.category?.toLowerCase().includes(searchTerm);
-                        return titleMatch || excerptMatch || categoryMatch;
+                        const contentMatch = post.content?.toLowerCase().includes(searchTerm);
+                        return titleMatch || excerptMatch || categoryMatch || contentMatch;
                     }
                     
                     return true;
@@ -587,9 +729,10 @@
                 postsGrid.classList.remove('hidden');
                 noResults.classList.add('hidden');
                 
-                postsGrid.innerHTML = this.filteredPosts.map(post => `
-                    <article class="bg-white dark:bg-emberflare-900 rounded-2xl border border-emberflare-200 dark:border-emberflare-800 overflow-hidden post-card-hover group cursor-pointer"
-                             onclick="blogApp.openFullscreenPost('${post.id}')">
+                postsGrid.innerHTML = this.filteredPosts.map((post, index) => `
+                    <article class="bg-white dark:bg-emberflare-900 rounded-2xl border border-emberflare-200 dark:border-emberflare-800 overflow-hidden post-card-hover group cursor-pointer animate-fade-in"
+                             style="animation-delay: ${index * 50}ms"
+                             onclick="openFullscreenPost('${post.id}')">
                         
                         ${post.imageUrl ? `
                             <div class="h-48 overflow-hidden relative">
@@ -603,7 +746,20 @@
                                     </span>
                                 </div>
                             </div>
-                        ` : ''}
+                        ` : `
+                            <div class="h-48 overflow-hidden relative bg-emberflare-100 dark:bg-emberflare-800">
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-4xl text-emberflare-300 dark:text-emberflare-600">
+                                        article
+                                    </span>
+                                </div>
+                                <div class="absolute top-3 left-3">
+                                    <span class="px-3 py-1 bg-emberflare-500 text-white text-xs font-semibold rounded-full">
+                                        ${post.category || 'Uncategorized'}
+                                    </span>
+                                </div>
+                            </div>
+                        `}
                         
                         <div class="p-6">
                             <div class="flex items-center gap-2 text-sm text-emberflare-500 mb-3">
@@ -626,7 +782,7 @@
                                 </button>
                                 
                                 <div class="flex items-center gap-4">
-                                    <button onclick="event.stopPropagation(); blogApp.likePost('${post.id}')"
+                                    <button onclick="event.stopPropagation(); likePost('${post.id}')"
                                             class="flex items-center gap-1 text-gray-500 hover:text-emberflare-500 transition-colors">
                                         <span class="material-symbols-outlined">favorite</span>
                                         <span class="text-sm" id="like-count-${post.id}">${post.likes || 0}</span>
@@ -642,13 +798,19 @@
                 // Update category filters
                 const categoryContainer = document.getElementById('category-container');
                 const categoryButtons = Array.from(this.categories).map(category => `
-                    <button onclick="blogApp.filterByCategory('${category}')" 
+                    <button onclick="filterByCategory('${category}')" 
                             class="category-btn px-4 py-2 bg-emberflare-100 dark:bg-emberflare-800 hover:bg-emberflare-200 dark:hover:bg-emberflare-700 text-emberflare-700 dark:text-emberflare-300 rounded-xl whitespace-nowrap transition-colors">
                         ${category}
                     </button>
                 `).join('');
                 
-                categoryContainer.innerHTML += categoryButtons;
+                categoryContainer.innerHTML = `
+                    <button onclick="filterByCategory('')" 
+                            class="category-btn px-4 py-2 bg-emberflare-500 text-white rounded-xl whitespace-nowrap font-medium">
+                        All Posts
+                    </button>
+                    ${categoryButtons}
+                `;
                 
                 // Update year filters
                 const yearFilter = document.getElementById('year-filter');
@@ -657,13 +819,12 @@
                     .map(year => `<option value="${year}">${year}</option>`)
                     .join('');
                 
-                yearFilter.innerHTML += yearOptions;
+                yearFilter.innerHTML = `<option value="">All Years</option>${yearOptions}`;
             }
             
             updateLoadMoreButton() {
                 const container = document.getElementById('load-more-container');
-                const hasMorePosts = this.filteredPosts.length < this.posts.length;
-                container.classList.toggle('hidden', !hasMorePosts);
+                container.classList.toggle('hidden', !this.hasMorePosts || this.filteredPosts.length >= this.posts.length);
             }
             
             filterByCategory(category) {
@@ -726,6 +887,9 @@
                     // Load comments
                     await this.loadComments(postId);
                     
+                    // Scroll to top
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    
                 } catch (error) {
                     console.error('Error opening post:', error);
                     this.showError('Failed to load post. Please try again.');
@@ -778,6 +942,12 @@
             
             async loadComments(postId) {
                 const commentsSection = document.getElementById('comments-section');
+                commentsSection.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-12">
+                        <div class="w-8 h-8 border-2 border-emberflare-200 dark:border-emberflare-800 border-t-emberflare-500 rounded-full animate-spin"></div>
+                        <p class="mt-4 text-gray-600 dark:text-emberflare-300">Loading comments...</p>
+                    </div>
+                `;
                 
                 try {
                     const commentsQuery = query(
@@ -801,7 +971,7 @@
                 } catch (error) {
                     console.error('Error loading comments:', error);
                     commentsSection.innerHTML = `
-                        <div class="text-center py-8 text-gray-500">
+                        <div class="text-center py-12 text-gray-500">
                             Failed to load comments
                         </div>
                     `;
@@ -814,18 +984,18 @@
                 container.innerHTML = `
                     <div class="animate-slide-up">
                         <div class="flex items-center justify-between mb-6">
-                            <h2 class="text-2xl font-bold">Comments</h2>
-                            <span class="text-gray-500">${comments.length} comments</span>
+                            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Comments</h2>
+                            <span class="text-gray-500 dark:text-emberflare-400">${comments.length} comment${comments.length !== 1 ? 's' : ''}</span>
                         </div>
                         
                         ${isLoggedIn ? `
                             <div class="mb-8 bg-emberflare-50 dark:bg-emberflare-900 rounded-2xl p-6">
                                 <textarea id="comment-input" 
                                           placeholder="Share your thoughts..."
-                                          class="w-full bg-transparent border-none focus:outline-none resize-none mb-4 min-h-[100px]"
+                                          class="w-full bg-transparent border-none focus:outline-none resize-none mb-4 min-h-[100px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-emberflare-500"
                                           rows="3"></textarea>
                                 <div class="flex justify-end">
-                                    <button onclick="blogApp.postComment('${postId}')"
+                                    <button onclick="postComment('${postId}')"
                                             class="px-6 py-2 bg-emberflare-500 hover:bg-emberflare-600 text-white font-semibold rounded-xl transition-colors">
                                         Post Comment
                                     </button>
@@ -836,7 +1006,7 @@
                                 <p class="text-gray-600 dark:text-emberflare-300 mb-4">
                                     Please log in to post comments
                                 </p>
-                                <button onclick="blogApp.showAuthModal()"
+                                <button onclick="showAuthModal()"
                                         class="px-6 py-2 bg-emberflare-500 hover:bg-emberflare-600 text-white font-semibold rounded-xl transition-colors">
                                     Log In
                                 </button>
@@ -855,9 +1025,9 @@
                                             </div>
                                             <div>
                                                 <div class="flex items-center gap-2">
-                                                    <span class="font-semibold">${comment.authorName || 'Anonymous'}</span>
+                                                    <span class="font-semibold text-gray-900 dark:text-white">${comment.authorName || 'Anonymous'}</span>
                                                     ${comment.isAdmin ? `
-                                                        <img src="/admin-badge.png" alt="Admin" class="w-4 h-4">
+                                                        <span class="admin-badge"></span>
                                                     ` : ''}
                                                 </div>
                                                 <span class="text-xs text-gray-500">
@@ -867,7 +1037,7 @@
                                         </div>
                                         
                                         ${comment.userId === this.currentUser?.uid ? `
-                                            <button onclick="blogApp.deleteComment('${postId}', '${comment.id}')"
+                                            <button onclick="deleteComment('${postId}', '${comment.id}')"
                                                     class="text-gray-400 hover:text-red-500">
                                                 <span class="material-symbols-outlined">delete</span>
                                             </button>
@@ -875,20 +1045,28 @@
                                     </div>
                                     
                                     ${this.isContentModerated(comment.content) ? `
-                                        <div class="blurred relative">
-                                            <p>${comment.content}</p>
-                                            <div class="absolute inset-0 flex items-center justify-center">
-                                                <div class="text-center p-4">
-                                                    <span class="material-symbols-outlined text-4xl text-emberflare-400 mb-2">
-                                                        warning
-                                                    </span>
-                                                    <p class="text-sm text-gray-600">Content moderated for respectful communication</p>
-                                                </div>
-                                            </div>
+                                        <div class="blurred rounded-lg p-4 mb-2">
+                                            <p class="text-gray-700 dark:text-emberflare-300 opacity-0">${comment.content}</p>
+                                        </div>
+                                        <div class="text-center p-2">
+                                            <p class="text-sm text-gray-500 dark:text-emberflare-400 flex items-center justify-center gap-1">
+                                                <span class="material-symbols-outlined text-amber-500">warning</span>
+                                                Content moderated for respectful communication
+                                            </p>
                                         </div>
                                     ` : `
                                         <p class="text-gray-700 dark:text-emberflare-300">${comment.content}</p>
                                     `}
+                                    
+                                    ${comment.reply ? `
+                                        <div class="mt-4 pl-4 border-l-2 border-emberflare-300">
+                                            <div class="flex items-center gap-2 mb-2">
+                                                <span class="font-medium text-emberflare-700 dark:text-emberflare-300">Admin Reply</span>
+                                                <span class="admin-badge"></span>
+                                            </div>
+                                            <p class="text-gray-700 dark:text-emberflare-300">${comment.reply}</p>
+                                        </div>
+                                    ` : ''}
                                 </div>
                             `).join('') : `
                                 <div class="text-center py-12 text-gray-500">
@@ -915,23 +1093,23 @@
                     
                     if (postSnap.exists()) {
                         const post = postSnap.data();
-                        const likes = post.likes || 0;
+                        const likes = (post.likes || 0) + 1;
                         
                         await updateDoc(postRef, {
-                            likes: likes + 1
+                            likes: likes
                         });
                         
                         // Update UI
                         const likeCountEl = document.getElementById(`like-count-${postId}`);
                         if (likeCountEl) {
-                            likeCountEl.textContent = likes + 1;
+                            likeCountEl.textContent = likes;
                         }
                         
-                        // Add ripple effect
-                        this.createRipple(event);
+                        this.showMessage('Liked!');
                     }
                 } catch (error) {
                     console.error('Error liking post:', error);
+                    this.showError('Failed to like post');
                 }
             }
             
@@ -967,7 +1145,7 @@
                     await addDoc(collection(db, 'posts', postId, 'comments'), commentData);
                     
                     commentInput.value = '';
-                    this.showSuccess('Comment posted successfully');
+                    this.showMessage('Comment posted successfully');
                     
                     // Reload comments
                     await this.loadComments(postId);
@@ -983,7 +1161,7 @@
                 
                 try {
                     await deleteDoc(doc(db, 'posts', postId, 'comments', commentId));
-                    this.showSuccess('Comment deleted');
+                    this.showMessage('Comment deleted');
                     await this.loadComments(postId);
                 } catch (error) {
                     console.error('Error deleting comment:', error);
@@ -997,8 +1175,9 @@
                     /admin.*password/i,
                     /hack|hacking/i,
                     /spam.*link/i,
-                    /https?:\/\//i,
-                    /@.*\..*/i
+                    /http:\/\/|https:\/\//i,
+                    /@.*\..*/i,
+                    /discord\.gg|t\.me/i
                 ];
                 
                 return restrictedPatterns.some(pattern => pattern.test(content));
@@ -1006,10 +1185,11 @@
             
             isContentModerated(content) {
                 const moderatedPatterns = [
-                    /idiot|stupid|dumb|ugly/i,
-                    /hate|kill|die/i,
-                    /shit|fuck|damn/i,
-                    /racist|sexist|homophobic/i
+                    /\b(idiot|stupid|dumb|ugly|fat|skinny)\b/i,
+                    /\b(hate|kill|die|death)\b/i,
+                    /\b(shit|fuck|damn|hell|bitch|asshole)\b/i,
+                    /\b(racist|sexist|homophobic|transphobic)\b/i,
+                    /\b(nazi|hitler|kkk)\b/i
                 ];
                 
                 return moderatedPatterns.some(pattern => pattern.test(content));
@@ -1027,7 +1207,7 @@
                 try {
                     await signInAnonymously(auth);
                     this.closeAuthModal();
-                    this.showSuccess('Logged in anonymously');
+                    this.showMessage('Logged in anonymously');
                 } catch (error) {
                     console.error('Anonymous login error:', error);
                     this.showError('Failed to log in');
@@ -1089,14 +1269,14 @@
                 }
                 
                 localStorage.setItem('username', username);
-                this.showSuccess('Username updated');
+                this.showMessage('Username updated');
                 this.closeSettings();
             }
             
             removeUsername() {
                 localStorage.removeItem('username');
                 document.getElementById('username-input').value = '';
-                this.showSuccess('Username removed');
+                this.showMessage('Username removed');
             }
             
             isUsernameRestricted(username) {
@@ -1106,7 +1286,9 @@
                     'eldrex',
                     'eldrex delos reyes bula',
                     'moderator',
-                    'system'
+                    'system',
+                    'owner',
+                    'root'
                 ];
                 
                 return restricted.some(name => 
@@ -1119,7 +1301,7 @@
                     await signOut(auth);
                     localStorage.removeItem('username');
                     this.closeSettings();
-                    this.showSuccess('Logged out successfully');
+                    this.showMessage('Logged out successfully');
                 } catch (error) {
                     console.error('Logout error:', error);
                     this.showError('Failed to log out');
@@ -1139,31 +1321,12 @@
                 if (navigator.share) {
                     navigator.share(shareData);
                 } else {
-                    navigator.clipboard.writeText(postUrl);
-                    this.showSuccess('Link copied to clipboard');
+                    navigator.clipboard.writeText(postUrl).then(() => {
+                        this.showMessage('Link copied to clipboard');
+                    }).catch(() => {
+                        this.showError('Failed to copy link');
+                    });
                 }
-            }
-            
-            createRipple(event) {
-                const button = event.currentTarget;
-                const ripple = document.createElement('span');
-                const rect = button.getBoundingClientRect();
-                
-                const size = Math.max(rect.width, rect.height);
-                const x = event.clientX - rect.left - size / 2;
-                const y = event.clientY - rect.top - size / 2;
-                
-                ripple.style.cssText = `
-                    width: ${size}px;
-                    height: ${size}px;
-                    left: ${x}px;
-                    top: ${y}px;
-                `;
-                
-                ripple.classList.add('ripple');
-                button.appendChild(ripple);
-                
-                setTimeout(() => ripple.remove(), 600);
             }
             
             formatDate(date) {
@@ -1202,24 +1365,27 @@
             }
             
             showNotification(message, bgColor) {
+                // Remove existing notifications
+                document.querySelectorAll('.notification').forEach(el => el.remove());
+                
                 const notification = document.createElement('div');
-                notification.className = `fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-xl shadow-lg animate-slide-up z-50`;
+                notification.className = `fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-xl shadow-lg animate-slide-up z-50 notification`;
                 notification.textContent = message;
                 
                 document.body.appendChild(notification);
                 
                 setTimeout(() => {
-                    notification.classList.add('opacity-0', 'translate-y-2');
+                    notification.classList.add('opacity-0', 'translate-y-2', 'transition-all', 'duration-300');
                     setTimeout(() => notification.remove(), 300);
                 }, 3000);
             }
         }
         
         // Initialize app
-        window.blogApp = new BlogApp();
+        const blogApp = new BlogApp();
         
         // Global helper functions
-        window.openAuthModal = () => blogApp.showAuthModal();
+        window.showAuthModal = () => blogApp.showAuthModal();
         window.closeAuthModal = () => blogApp.closeAuthModal();
         window.loginAnonymously = () => blogApp.loginAnonymously();
         window.continueWithoutLogin = () => blogApp.continueWithoutLogin();
@@ -1232,21 +1398,16 @@
         window.loadMorePosts = () => blogApp.loadMorePosts();
         window.sharePost = () => blogApp.sharePost();
         window.closeFullscreenPost = () => blogApp.closeFullscreenPost();
+        window.openFullscreenPost = (postId) => blogApp.openFullscreenPost(postId);
+        window.likePost = (postId) => blogApp.likePost(postId);
+        window.postComment = (postId) => blogApp.postComment(postId);
+        window.deleteComment = (postId, commentId) => blogApp.deleteComment(postId, commentId);
         window.clearSearch = () => {
             document.getElementById('search-input').value = '';
             blogApp.currentSearch = '';
             blogApp.filterPosts();
             blogApp.updateClearSearchButton();
         };
-        
-        // Handle browser back button for fullscreen post
-        window.addEventListener('popstate', (event) => {
-            if (event.state?.postId) {
-                blogApp.openFullscreenPost(event.state.postId);
-            } else {
-                blogApp.closeFullscreenPost();
-            }
-        });
     </script>
 </body>
 </html>
